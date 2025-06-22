@@ -16,22 +16,76 @@ func New() *Bitmap {
 
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
-	panic("not implemented")
+	high := uint16(x >> 16)
+	low := uint16(x & 0xFFFF)
+
+	c, exists := rb.containers[high]
+	if !exists {
+		// Create new empty array container for sparse data
+		c = container{
+			Type: typeArray,
+			Size: 0,               // Start with zero cardinality
+			Data: make([]byte, 0), // Start empty
+		}
+		rb.containers[high] = c
+	}
+
+	c.set(low)
+	rb.containers[high] = c
 }
 
 // Remove removes the bit x from the bitmap, but does not shrink it.
 func (rb *Bitmap) Remove(x uint32) {
-	panic("not implemented")
+	high := uint16(x >> 16)
+	low := uint16(x & 0xFFFF)
+
+	c, exists := rb.containers[high]
+	if !exists {
+		return // Nothing to remove
+	}
+
+	if c.remove(low) {
+		if c.isEmpty() {
+			delete(rb.containers, high)
+		} else {
+			rb.containers[high] = c
+		}
+	}
 }
 
 // Contains checks whether a value is contained in the bitmap or not.
 func (rb *Bitmap) Contains(x uint32) bool {
-	panic("not implemented")
+	high := uint16(x >> 16)
+	low := uint16(x & 0xFFFF)
+
+	c, exists := rb.containers[high]
+	if !exists {
+		return false
+	}
+
+	return c.contains(low)
 }
 
 // Count returns the total number of bits set to 1 in the bitmap
 func (rb *Bitmap) Count() int {
-	panic("not implemented")
+	count := 0
+	for _, c := range rb.containers {
+		count += c.cardinality()
+	}
+	return count
+}
+
+// Clear clears the bitmap and resizes it to zero.
+func (rb *Bitmap) Clear() {
+	rb.containers = make(map[uint16]container)
+}
+
+// Optimize optimizes all containers to use the most efficient representation.
+// This can significantly reduce memory usage, especially after bulk operations.
+func (rb *Bitmap) Optimize() {
+	for _, c := range rb.containers {
+		c.runOptimize()
+	}
 }
 
 // Grow grows the bitmap size until we reach the desired bit.
@@ -39,8 +93,8 @@ func (rb *Bitmap) Grow(desiredBit uint32) {
 	panic("not implemented")
 }
 
-// Clear clears the bitmap and resizes it to zero.
-func (rb *Bitmap) Clear() {
+// Clone clones the bitmap
+func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	panic("not implemented")
 }
 
@@ -88,11 +142,6 @@ func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 
 // ReadFrom reads the bitmap from a reader
 func (rb *Bitmap) ReadFrom(r io.Reader) (int64, error) {
-	panic("not implemented")
-}
-
-// Clone clones the bitmap
-func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	panic("not implemented")
 }
 

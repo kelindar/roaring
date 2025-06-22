@@ -15,8 +15,9 @@ const (
 )
 
 type container struct {
-	Type ctype
-	Data []byte
+	Type ctype  // Type of the container
+	Size uint16 // Cardinality
+	Data []byte // Data of the container
 }
 
 type run [2]uint16
