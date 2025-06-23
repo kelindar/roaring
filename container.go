@@ -35,7 +35,7 @@ func (c *container) set(value uint16) (ok bool) {
 		}
 		return
 	case typeRun:
-		if ok = c.runSet(value); ok && c.runShouldConvert() {
+		if ok = c.runSet(value); ok && len(c.run()) > runMinSize {
 			c.runToBmp()
 		}
 	}
@@ -53,7 +53,7 @@ func (c *container) remove(value uint16) (ok bool) {
 		}
 		return
 	case typeRun:
-		if ok = c.runDel(value); ok && c.runShouldConvert() {
+		if ok = c.runDel(value); ok && len(c.run()) > runMinSize {
 			c.runToBmp()
 		}
 		return
@@ -90,16 +90,16 @@ func (c *container) runOptimize() {
 	switch c.Type {
 	case typeArray:
 		switch {
-		case c.arrShouldConvertToRun():
-			c.arrToRun()
 		case c.arrShouldConvertToBitmap():
 			c.arrToBmp()
+		case c.arrTryConvertToRun():
+			// Conversion already performed in arrTryConvertToRun()
 		}
 
 	case typeBitmap:
 		switch {
-		case c.bmpShouldConvertToRun():
-			c.bmpToRun()
+		case c.bmpTryConvertToRun():
+			// Conversion already performed in bmpTryConvertToRun()
 		case c.bmpShouldConvertToArray():
 			c.bmpToArr()
 		}

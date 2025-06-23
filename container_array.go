@@ -72,63 +72,23 @@ func (c *container) arrShouldConvertToBitmap() bool {
 	return c.Size > arrMinSize
 }
 
-// arrShouldConvertToRun returns true if array should be converted to run
-func (c *container) arrShouldConvertToRun() bool {
+// arrTryConvertToRun attempts to convert array to run in a single pass
+// Returns true if conversion was performed, false otherwise
+//
+// OPTIMIZATION APPROACH:
+// Single-pass build+convert: Build runs while deciding in one iteration
+// - Eliminates double iteration when conversion is needed
+// - More memory efficient when actually converting
+// - Alternative would be separate counting pass + conversion pass like official RoaringBitmap
+func (c *container) arrTryConvertToRun() bool {
 	array := c.arr()
 	if len(array) < 128 {
 		return false // Need at least 128 elements to form a meaningful run
 	}
 
-	// Count potential runs by analyzing consecutive sequences
-	numRuns := 1
-	for i := 1; i < len(array); i++ {
-		if array[i] != array[i-1]+1 {
-			numRuns++
-		}
-	}
-
-	// Convert to run if it would save significant space and we have few runs
-	// Array: 2 bytes per element
-	// Run: 4 bytes per run + 2 bytes header
-	sizeAsArray := len(array) * 2
-	sizeAsRun := numRuns*4 + 2
-
-	// Only convert if we save at least 25% space and have reasonable compression
-	return sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
-}
-
-// arrToBmp converts this container from array to bitmap
-func (c *container) arrToBmp() {
-	array := c.arr()
-
-	// Create bitmap data (65536 bits = 8192 bytes)
-	c.Data = make([]byte, 8192)
-	c.Type = typeBitmap
-	bm := c.bmp()
-
-	// Set all bits from the array
-	for _, value := range array {
-		bm.Set(uint32(value))
-	}
-
-	// Update cardinality from bitmap
-	c.Size = uint16(bm.Count())
-}
-
-// arrToRun converts this container from array to run
-func (c *container) arrToRun() {
-	array := c.arr()
-	cardinality := c.Size // Preserve cardinality
 	var runs []run
 
-	if len(array) == 0 {
-		c.Data = nil
-		c.Type = typeRun
-		c.Size = 0
-		return
-	}
-
-	// Find consecutive ranges in the sorted array
+	// Single iteration: build runs AND count them
 	currentStart := array[0]
 	currentEnd := array[0]
 
@@ -147,10 +107,42 @@ func (c *container) arrToRun() {
 	// Add the final run
 	runs = append(runs, run{currentStart, currentEnd})
 
-	// Create new run data
-	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
-	c.Type = typeRun
-	c.Size = cardinality // Restore cardinality
-	newRuns := c.run()
-	copy(newRuns, runs)
+	// Now check conversion criteria with the actual run count
+	numRuns := len(runs)
+
+	// Convert to run if it would save significant space and we have few runs
+	// Array: 2 bytes per element
+	// Run: 4 bytes per run + 2 bytes header
+	sizeAsArray := len(array) * 2
+	sizeAsRun := numRuns*4 + 2
+
+	// Only convert if we save at least 25% space and have reasonable compression
+	shouldConvert := sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
+	if shouldConvert {
+		c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
+		c.Type = typeRun
+		newRuns := c.run()
+		copy(newRuns, runs)
+		return true
+	}
+
+	return false
+}
+
+// arrToBmp converts this container from array to bitmap
+func (c *container) arrToBmp() {
+	array := c.arr()
+
+	// Create bitmap data (65536 bits = 8192 bytes)
+	c.Data = make([]byte, 8192)
+	c.Type = typeBitmap
+	bm := c.bmp()
+
+	// Set all bits from the array
+	for _, value := range array {
+		bm.Set(uint32(value))
+	}
+
+	// Update cardinality from bitmap
+	c.Size = uint16(bm.Count())
 }

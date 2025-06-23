@@ -221,25 +221,6 @@ func (c *container) runRemoveRunAt(index int) {
 	}
 }
 
-// runShouldConvert returns true if run container should convert to bitmap
-func (c *container) runShouldConvert() bool {
-	runs := c.run()
-	numRuns := len(runs)
-	cardinality := int(c.Size)
-
-	// Convert to bitmap if we have too many runs (run container becomes inefficient)
-	if numRuns > runMinSize {
-		return true
-	}
-
-	// Convert to bitmap if density is high (similar to array threshold)
-	if cardinality > arrMinSize {
-		return true
-	}
-
-	return false
-}
-
 // runToArray converts this container from run to array
 func (c *container) runToArray() {
 	runs := c.run()
