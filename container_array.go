@@ -62,10 +62,27 @@ func (c *container) arrayShouldConvertToBitmap() bool {
 
 // arrayShouldConvertToRun returns true if array should be converted to run
 func (c *container) arrayShouldConvertToRun() bool {
-	// For now, we don't auto-convert array to run
-	// This would require analyzing the array for consecutive sequences
-	// which is not critical for basic functionality
-	return false
+	array := c.array()
+	if len(array) < 128 {
+		return false // Need at least 128 elements to form a meaningful run
+	}
+
+	// Count potential runs by analyzing consecutive sequences
+	numRuns := 1
+	for i := 1; i < len(array); i++ {
+		if array[i] != array[i-1]+1 {
+			numRuns++
+		}
+	}
+
+	// Convert to run if it would save significant space and we have few runs
+	// Array: 2 bytes per element
+	// Run: 4 bytes per run + 2 bytes header
+	sizeAsArray := len(array) * 2
+	sizeAsRun := numRuns*4 + 2
+
+	// Only convert if we save at least 25% space and have reasonable compression
+	return sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
 }
 
 // arrayConvertFromBitmap converts this container from bitmap to array
@@ -77,6 +94,29 @@ func (c *container) arrayConvertFromBitmap() {
 	for i := uint32(0); i < 65536; i++ {
 		if bm.Contains(i) {
 			values = append(values, uint16(i))
+		}
+	}
+
+	// Create new array data
+	c.Data = make([]byte, len(values)*2)
+	c.Type = typeArray
+	c.Size = uint16(len(values)) // Set cardinality
+	array := c.array()
+	copy(array, values)
+}
+
+// arrayConvertFromRun converts this container from run to array
+func (c *container) arrayConvertFromRun() {
+	runs := c.run()
+	var values []uint16
+
+	// Extract all values from runs
+	for _, r := range runs {
+		for value := r[0]; value <= r[1]; value++ {
+			values = append(values, value)
+			if value == r[1] {
+				break // Prevent uint16 overflow when r[1] is 65535
+			}
 		}
 	}
 

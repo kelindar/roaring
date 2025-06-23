@@ -7,7 +7,7 @@ func (c *container) bitmapSet(value uint16) bool {
 		return false // Already exists
 	}
 	bm.Set(uint32(value))
-	c.Size++ // Increment cardinality
+	c.Size = uint16(bm.Count()) // Update cardinality from bitmap
 	return true
 }
 
@@ -16,7 +16,7 @@ func (c *container) bitmapRemove(value uint16) bool {
 	bm := c.bitmap()
 	if bm.Contains(uint32(value)) {
 		bm.Remove(uint32(value))
-		c.Size-- // Decrement cardinality
+		c.Size = uint16(bm.Count()) // Update cardinality from bitmap
 		return true
 	}
 	return false
@@ -35,20 +35,26 @@ func (c *container) bitmapShouldConvertToArray() bool {
 
 // bitmapShouldConvertToRun returns true if bitmap should be converted to run
 func (c *container) bitmapShouldConvertToRun() bool {
+	if c.Size == 0 {
+		return false
+	}
+
 	numRuns := c.bitmapNumberOfRuns()
 	cardinality := int(c.Size)
+
+	// Very conservative thresholds to avoid premature conversion
+	const sizeAsBitmapContainer = 8192
 
 	// Estimated size as run container (each run takes 4 bytes + 2 bytes header)
 	sizeAsRunContainer := 2 + numRuns*4
 
-	// Size as bitmap container (always 8192 bytes)
-	sizeAsBitmapContainer := 8192
-
 	// Size as array container (2 bytes per element)
 	sizeAsArrayContainer := cardinality * 2
 
-	// Convert to run if it's smaller than both bitmap and array representations
-	return sizeAsRunContainer < sizeAsBitmapContainer && sizeAsRunContainer < sizeAsArrayContainer
+	// Only convert if run representation is MUCH smaller and we have very few runs
+	return numRuns <= 5 &&
+		sizeAsRunContainer < sizeAsBitmapContainer/4 &&
+		sizeAsRunContainer < sizeAsArrayContainer/2
 }
 
 // bitmapNumberOfRuns counts consecutive runs in the bitmap
@@ -82,35 +88,40 @@ func (c *container) bitmapNumberOfRuns() int {
 // bitmapConvertFromArray converts this container from array to bitmap
 func (c *container) bitmapConvertFromArray() {
 	array := c.array()
-	cardinality := c.Size // Preserve cardinality
 
 	// Create bitmap data (65536 bits = 8192 bytes)
 	c.Data = make([]byte, 8192)
 	c.Type = typeBitmap
-	c.Size = cardinality // Restore cardinality
 	bm := c.bitmap()
 
 	// Set all bits from the array
 	for _, value := range array {
 		bm.Set(uint32(value))
 	}
+
+	// Update cardinality from bitmap
+	c.Size = uint16(bm.Count())
 }
 
 // bitmapConvertFromRun converts this container from run to bitmap
 func (c *container) bitmapConvertFromRun() {
 	runs := c.run()
-	cardinality := c.Size // Preserve cardinality
 
 	// Create bitmap data (65536 bits = 8192 bytes)
 	c.Data = make([]byte, 8192)
 	c.Type = typeBitmap
-	c.Size = cardinality // Restore cardinality
 	bm := c.bitmap()
 
 	// Set all bits from the runs
 	for _, r := range runs {
 		for i := r[0]; i <= r[1]; i++ {
 			bm.Set(uint32(i))
+			if i == r[1] {
+				break // Prevent uint16 overflow when r[1] is 65535
+			}
 		}
 	}
+
+	// Update cardinality from bitmap
+	c.Size = uint16(bm.Count())
 }

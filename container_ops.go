@@ -7,8 +7,9 @@ func (c *container) set(value uint16) bool {
 		modified := c.arraySet(value)
 		if modified && c.arrayShouldConvertToBitmap() {
 			c.bitmapConvertFromArray()
+		} else if modified && c.arrayShouldConvertToRun() {
+			c.runConvertFromArray()
 		}
-		// Note: arrayShouldConvertToRun() returns false for now
 		return modified
 	case typeBitmap:
 		modified := c.bitmapSet(value)
@@ -27,14 +28,17 @@ func (c *container) remove(value uint16) bool {
 	switch c.Type {
 	case typeArray:
 		modified := c.arrayRemove(value)
-		// Note: arrayShouldConvertToRun() returns false for now
+		if modified && c.arrayShouldConvertToRun() {
+			c.runConvertFromArray()
+		}
 		return modified
 	case typeBitmap:
 		modified := c.bitmapRemove(value)
 		if modified && c.bitmapShouldConvertToArray() {
 			c.arrayConvertFromBitmap()
+		} else if modified && c.bitmapShouldConvertToRun() {
+			c.runConvertFromBitmap()
 		}
-		// Note: bitmapShouldConvertToRun() returns false for now
 		return modified
 	case typeRun:
 		modified := c.runRemove(value)
@@ -74,8 +78,10 @@ func (c *container) isEmpty() bool {
 func (c *container) runOptimize() {
 	switch c.Type {
 	case typeArray:
-		// Array -> Bitmap -> Run (if beneficial)
-		if c.arrayShouldConvertToBitmap() {
+		// Check direct conversions first
+		if c.arrayShouldConvertToRun() {
+			c.runConvertFromArray()
+		} else if c.arrayShouldConvertToBitmap() {
 			c.bitmapConvertFromArray()
 			if c.bitmapShouldConvertToRun() {
 				c.runConvertFromBitmap()
@@ -90,10 +96,19 @@ func (c *container) runOptimize() {
 	case typeRun:
 		// Already a run container, check if it should convert to something else for efficiency
 		if c.runShouldConvert() {
-			c.bitmapConvertFromRun()
-			// After converting to bitmap, check if array would be better
-			if c.bitmapShouldConvertToArray() {
-				c.arrayConvertFromBitmap()
+			numRuns := len(c.run())
+			cardinality := int(c.Size)
+
+			// Convert directly to array if: small cardinality and few runs
+			if cardinality <= 4096 && numRuns >= cardinality/2 {
+				c.arrayConvertFromRun()
+			} else {
+				// Otherwise convert to bitmap
+				c.bitmapConvertFromRun()
+				// After converting to bitmap, check if array would be better
+				if c.bitmapShouldConvertToArray() {
+					c.arrayConvertFromBitmap()
+				}
 			}
 		}
 	}

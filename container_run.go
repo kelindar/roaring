@@ -7,6 +7,7 @@ func (c *container) runSet(value uint16) bool {
 	if len(runs) == 0 {
 		// Empty container, add first run
 		c.runInsertRunAt(0, run{value, value})
+		c.Size++ // Update cardinality for the new value
 		return true
 	}
 
@@ -58,8 +59,7 @@ func (c *container) runSet(value uint16) bool {
 
 	// Convert to array if: small cardinality and few runs
 	if cardinality <= 4096 && numRuns >= cardinality/2 {
-		c.bitmapConvertFromRun()
-		c.arrayConvertFromBitmap()
+		c.arrayConvertFromRun()
 		return true
 	}
 
@@ -129,23 +129,6 @@ func (c *container) runRemove(value uint16) bool {
 
 	// Update cardinality after modification
 	c.Size--
-
-	// Execute three integer comparisons for conversion check
-	numRuns := len(c.run())
-	cardinality := int(c.Size)
-
-	// Convert to array if: small cardinality and few runs
-	if cardinality <= 4096 && numRuns >= cardinality/2 {
-		c.bitmapConvertFromRun()
-		c.arrayConvertFromBitmap()
-		return true
-	}
-
-	// Convert to bitmap if: too many runs or high density
-	if numRuns > 2048 || cardinality > 32768 {
-		c.bitmapConvertFromRun()
-		return true
-	}
 
 	return true
 }
@@ -278,6 +261,46 @@ func (c *container) runConvertFromBitmap() {
 	if inRun {
 		runs = append(runs, run{currentStart, 65535})
 	}
+
+	// Create new run data
+	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
+	c.Type = typeRun
+	c.Size = cardinality // Restore cardinality
+	newRuns := c.run()
+	copy(newRuns, runs)
+}
+
+// runConvertFromArray converts this container from array to run
+func (c *container) runConvertFromArray() {
+	array := c.array()
+	cardinality := c.Size // Preserve cardinality
+	var runs []run
+
+	if len(array) == 0 {
+		c.Data = nil
+		c.Type = typeRun
+		c.Size = 0
+		return
+	}
+
+	// Find consecutive ranges in the sorted array
+	currentStart := array[0]
+	currentEnd := array[0]
+
+	for i := 1; i < len(array); i++ {
+		if array[i] == currentEnd+1 {
+			// Continue current run
+			currentEnd = array[i]
+		} else {
+			// End current run and start new one
+			runs = append(runs, run{currentStart, currentEnd})
+			currentStart = array[i]
+			currentEnd = array[i]
+		}
+	}
+
+	// Add the final run
+	runs = append(runs, run{currentStart, currentEnd})
 
 	// Create new run data
 	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)

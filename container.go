@@ -46,5 +46,5 @@ func (c *container) run() []run {
 		return nil
 	}
 
-	return unsafe.Slice((*run)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
+	return unsafe.Slice((*run)(unsafe.Pointer(&c.Data[0])), len(c.Data)/4)
 }
