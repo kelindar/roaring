@@ -84,30 +84,14 @@ func (c *container) isEmpty() bool {
 	return c.cardinality() == 0
 }
 
-// runOptimize converts the container to run format if it would be more efficient
-// This method analyzes the current container and converts it to the most efficient representation
-func (c *container) runOptimize() {
+// optimize converts the container to the most efficient representation
+func (c *container) optimize() {
 	switch c.Type {
 	case typeArray:
-		switch {
-		case c.arrTryConvertToRun():
-		case c.Size > arrMinSize:
-			c.arrToBmp()
-		}
-
+		c.arrTryOptimize()
 	case typeBitmap:
-		switch {
-		case c.bmpTryConvertToRun():
-		case c.Size <= arrMinSize:
-			c.bmpToArr()
-		}
-
+		c.bmpTryOptimize()
 	case typeRun:
-		switch {
-		case c.Size <= arrMinSize:
-			c.runToArray()
-		case len(c.run()) > runMinSize:
-			c.runToBmp()
-		}
+		c.runTryOptimize()
 	}
 }

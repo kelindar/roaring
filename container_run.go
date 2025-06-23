@@ -74,12 +74,7 @@ func (c *container) runSet(value uint16) bool {
 		return true
 	}
 
-	// Convert to bitmap if: too many runs or high density
-	if numRuns > 2048 || cardinality > 32768 {
-		c.runToBmp()
-		return true
-	}
-
+	c.runTryOptimize()
 	return true
 }
 
@@ -140,14 +135,12 @@ func (c *container) runDel(value uint16) bool {
 
 	// Update cardinality after modification
 	c.Size--
-
 	return true
 }
 
 // runHas checks if a value exists in a run container using binary search
 func (c *container) runHas(value uint16) bool {
 	runs := c.run()
-
 	if len(runs) == 0 {
 		return false
 	}
@@ -218,6 +211,31 @@ func (c *container) runRemoveRunAt(index int) {
 		c.Data = make([]byte, len(newRuns)*4)
 		finalRuns := c.run()
 		copy(finalRuns, newRuns)
+	}
+}
+
+// runTryOptimize tries to optimize the container
+func (c *container) runTryOptimize() {
+	if c.Type != typeRun || c.Size == 0 {
+		return
+	}
+
+	// Efficiency metrics
+	numRuns := len(c.run())
+	avgRunLength := float64(c.Size) / float64(numRuns)
+	compressionVsBitmap := float64(numRuns*4+2) / float64(8192)
+	runDensity := float64(numRuns) / float64(c.Size)
+
+	// Optimize container
+	switch {
+	case numRuns > 2048:
+		c.runToBmp()
+	case c.Size <= 4096 && runDensity > 0.5:
+		c.runToArray()
+	case c.Size > 32768 && compressionVsBitmap > 0.8:
+		c.runToBmp()
+	case avgRunLength < 2.0:
+		c.runToArray()
 	}
 }
 

@@ -49,7 +49,7 @@ func TestTransitions(t *testing.T) {
 	assert.Equal(t, i0, rb.Count())
 
 	// bitmap -> run
-	//rb.Optimize()
+	rb.Optimize()
 	assert.Equal(t, i0, rb.Count())
 
 	// Expand the run

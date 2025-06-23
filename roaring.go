@@ -79,7 +79,7 @@ func (rb *Bitmap) Clear() {
 // This can significantly reduce memory usage, especially after bulk operations.
 func (rb *Bitmap) Optimize() {
 	for _, c := range rb.containers {
-		c.runOptimize()
+		c.optimize()
 	}
 }
 

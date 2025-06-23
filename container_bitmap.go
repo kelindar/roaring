@@ -40,6 +40,15 @@ func (c *container) bmpHas(value uint16) bool {
 	return c.bmp().Contains(uint32(value))
 }
 
+// bmpTryOptimize tries to optimize the container
+func (c *container) bmpTryOptimize() {
+	switch {
+	case c.bmpTryConvertToRun():
+	case c.Size <= arrMinSize:
+		c.bmpToArr()
+	}
+}
+
 // bmpTryConvertToRun attempts to convert bitmap to run in a single pass
 // Returns true if conversion was performed, false otherwise
 func (c *container) bmpTryConvertToRun() bool {

@@ -66,6 +66,15 @@ func (c *container) arrHas(value uint16) bool {
 	return i < len(array) && array[i] == value
 }
 
+// arrTryOptimize tries to optimize the container
+func (c *container) arrTryOptimize() {
+	switch {
+	case c.arrTryConvertToRun():
+	case c.Size > arrMinSize:
+		c.arrToBmp()
+	}
+}
+
 // arrTryConvertToRun attempts to convert array to run in a single pass
 // Returns true if conversion was performed, false otherwise
 func (c *container) arrTryConvertToRun() bool {
