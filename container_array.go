@@ -66,11 +66,6 @@ func (c *container) arrHas(value uint16) bool {
 	return i < len(array) && array[i] == value
 }
 
-// arrShouldConvertToBitmap returns true if array should be converted to bitmap
-func (c *container) arrShouldConvertToBitmap() bool {
-	return c.Size > arrMinSize
-}
-
 // arrTryConvertToRun attempts to convert array to run in a single pass
 // Returns true if conversion was performed, false otherwise
 func (c *container) arrTryConvertToRun() bool {
@@ -137,5 +132,5 @@ func (c *container) arrToBmp() {
 	}
 
 	// Update cardinality from bitmap
-	c.Size = uint16(bm.Count())
+	c.Size = uint32(bm.Count())
 }

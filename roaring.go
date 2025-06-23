@@ -30,25 +30,21 @@ func (rb *Bitmap) Set(x uint32) {
 	}
 
 	c.set(low)
-	rb.containers[high] = c
 }
 
 // Remove removes the bit x from the bitmap, but does not shrink it.
 func (rb *Bitmap) Remove(x uint32) {
-	high := uint16(x >> 16)
-	low := uint16(x & 0xFFFF)
-
-	c, exists := rb.containers[high]
-	if !exists {
-		return // Nothing to remove
+	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
+	c, exists := rb.containers[hi]
+	if !exists || !c.remove(lo) {
+		return
 	}
 
-	if c.remove(low) {
-		if c.isEmpty() {
-			delete(rb.containers, high)
-		} else {
-			rb.containers[high] = c
-		}
+	switch {
+	case c.isEmpty():
+		delete(rb.containers, hi)
+	default:
+		rb.containers[hi] = c
 	}
 }
 

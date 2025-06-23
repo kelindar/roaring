@@ -239,7 +239,7 @@ func (c *container) runToArray() {
 	// Create new array data
 	c.Data = make([]byte, len(values)*2)
 	c.Type = typeArray
-	c.Size = uint16(len(values)) // Set cardinality
+	c.Size = uint32(len(values)) // Set cardinality
 	array := c.arr()
 	copy(array, values)
 }
@@ -264,5 +264,5 @@ func (c *container) runToBmp() {
 	}
 
 	// Update cardinality from bitmap
-	c.Size = uint16(bm.Count())
+	c.Size = uint32(bm.Count())
 }

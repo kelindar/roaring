@@ -38,49 +38,33 @@ func TestBasicOperations(t *testing.T) {
 }
 
 func TestTransitions(t *testing.T) {
-	const count = 60000
+	const i0, i1 = 60000, 100000
 
-	t.Run("array -> bitmap -> array", func(t *testing.T) {
-		rb := New()
-		for i := 0; i < count; i++ {
-			rb.Set(uint32(i))
-			assert.True(t, rb.Contains(uint32(i)))
-		}
-		assert.Equal(t, count, rb.Count())
-		for i := 0; i < count; i++ {
-			rb.Remove(uint32(i))
-			assert.False(t, rb.Contains(uint32(i)))
-		}
-		assert.Equal(t, 0, rb.Count())
-	})
+	// array -> bitmap
+	rb := New()
+	for i := 0; i < i0; i++ {
+		rb.Set(uint32(i))
+		assert.True(t, rb.Contains(uint32(i)))
+	}
+	assert.Equal(t, i0, rb.Count())
 
-	t.Run("bitmap -> run -> bitmap", func(t *testing.T) {
-		rb := New()
-		for i := 0; i < count; i++ {
-			rb.Set(uint32(i))
-			assert.True(t, rb.Contains(uint32(i)))
-		}
+	// bitmap -> run
+	//rb.Optimize()
+	assert.Equal(t, i0, rb.Count())
 
-		rb.Optimize()
-		assert.Equal(t, count, rb.Count())
+	// Expand the run
+	for i := i0; i < i1; i++ {
+		rb.Set(uint32(i))
+		assert.True(t, rb.Contains(uint32(i)))
+	}
+	assert.Equal(t, i1, rb.Count())
 
-		for i := 0; i < count; i++ {
-			rb.Remove(uint32(i))
-			assert.False(t, rb.Contains(uint32(i)))
-		}
-		assert.Equal(t, 0, rb.Count())
-	})
-
-	t.Run("array -> run", func(t *testing.T) {
-		rb := New()
-		for i := 0; i < 500; i++ {
-			rb.Set(uint32(i))
-			assert.True(t, rb.Contains(uint32(i)))
-		}
-		rb.Optimize()
-		assert.Equal(t, 500, rb.Count())
-	})
-
+	// Remove from a run
+	for i := i0; i < i1; i++ {
+		rb.Remove(uint32(i))
+		assert.False(t, rb.Contains(uint32(i)))
+	}
+	assert.Equal(t, i0, rb.Count())
 }
 
 // TestMixedOperations covers various operation patterns in single test

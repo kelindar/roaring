@@ -40,11 +40,6 @@ func (c *container) bmpHas(value uint16) bool {
 	return c.bmp().Contains(uint32(value))
 }
 
-// bmpShouldConvertToArray returns true if bitmap should be converted to array
-func (c *container) bmpShouldConvertToArray() bool {
-	return c.Size <= arrMinSize
-}
-
 // bmpTryConvertToRun attempts to convert bitmap to run in a single pass
 // Returns true if conversion was performed, false otherwise
 func (c *container) bmpTryConvertToRun() bool {
@@ -120,7 +115,7 @@ func (c *container) bmpToArr() {
 	// Create new array data
 	c.Data = make([]byte, len(out)*2)
 	c.Type = typeArray
-	c.Size = uint16(len(out)) // Set cardinality
+	c.Size = uint32(len(out)) // Set cardinality
 	array := c.arr()
 	copy(array, out)
 }

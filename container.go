@@ -15,7 +15,7 @@ const (
 
 type container struct {
 	Type ctype  // Type of the container
-	Size uint16 // Cardinality
+	Size uint32 // Cardinality
 	Data []byte // Data of the container
 }
 
@@ -25,12 +25,12 @@ type run [2]uint16
 func (c *container) set(value uint16) (ok bool) {
 	switch c.Type {
 	case typeArray:
-		if ok = c.arrSet(value); ok && c.arrShouldConvertToBitmap() {
+		if ok = c.arrSet(value); ok && c.Size > arrMinSize {
 			c.arrToBmp()
 		}
 		return
 	case typeBitmap:
-		if ok = c.bmpSet(value); ok && c.bmpShouldConvertToArray() {
+		if ok = c.bmpSet(value); ok && c.Size <= arrMinSize {
 			c.bmpToArr()
 		}
 		return
@@ -48,7 +48,7 @@ func (c *container) remove(value uint16) (ok bool) {
 	case typeArray:
 		return c.arrDel(value)
 	case typeBitmap:
-		if ok = c.bmpDel(value); ok && c.bmpShouldConvertToArray() {
+		if ok = c.bmpDel(value); ok && c.Size <= arrMinSize {
 			c.bmpToArr()
 		}
 		return
@@ -91,14 +91,14 @@ func (c *container) runOptimize() {
 	case typeArray:
 		switch {
 		case c.arrTryConvertToRun():
-		case c.arrShouldConvertToBitmap():
+		case c.Size > arrMinSize:
 			c.arrToBmp()
 		}
 
 	case typeBitmap:
 		switch {
 		case c.bmpTryConvertToRun():
-		case c.bmpShouldConvertToArray():
+		case c.Size <= arrMinSize:
 			c.bmpToArr()
 		}
 
