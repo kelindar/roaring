@@ -65,6 +65,12 @@ func TestTransitions(t *testing.T) {
 		assert.False(t, rb.Contains(uint32(i)))
 	}
 	assert.Equal(t, i0, rb.Count())
+
+	for i := 0; i < i0; i += 2 {
+		rb.Remove(uint32(i))
+		assert.False(t, rb.Contains(uint32(i)))
+	}
+	assert.Equal(t, i0/2, rb.Count())
 }
 
 // TestMixedOperations covers various operation patterns in single test
