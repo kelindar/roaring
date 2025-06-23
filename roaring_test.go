@@ -37,23 +37,43 @@ func TestBasicOperations(t *testing.T) {
 	assert.False(t, rb.Contains(1))
 }
 
-// TestContainerTransitions verifies container type changes work correctly
 func TestContainerTransitions(t *testing.T) {
 	const count = 60000
 	rb := New()
 
-	// Force transitions array -> bitmap
-	for i := 0; i < count; i++ {
-		rb.Set(uint32(i))
-	}
-	assert.Equal(t, count, rb.Count())
+	t.Run("array -> bitmap", func(t *testing.T) {
+		for i := 0; i < count; i++ {
+			rb.Set(uint32(i))
+		}
+		assert.Equal(t, count, rb.Count())
+	})
 
-	// Force transitions bitmap -> array
-	for i := 0; i < count; i++ {
-		rb.Remove(uint32(i))
-	}
-	assert.Equal(t, 0, rb.Count())
+	t.Run("bitmap -> array", func(t *testing.T) {
+		for i := 0; i < count; i++ {
+			rb.Remove(uint32(i))
+		}
+		assert.Equal(t, 0, rb.Count())
+	})
+}
 
+func TestContainerOptimize(t *testing.T) {
+	t.Run("array -> run", func(t *testing.T) {
+		rb := New()
+		for i := 0; i < 500; i++ {
+			rb.Set(uint32(i))
+		}
+		rb.Optimize()
+		assert.Equal(t, 500, rb.Count())
+	})
+
+	t.Run("bitmap -> run", func(t *testing.T) {
+		rb := New()
+		for i := 0; i < 6000; i++ {
+			rb.Set(uint32(i))
+		}
+		rb.Optimize()
+		assert.Equal(t, 6000, rb.Count())
+	})
 }
 
 // TestMixedOperations covers various operation patterns in single test
