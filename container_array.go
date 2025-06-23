@@ -66,8 +66,8 @@ func (c *container) arrHas(value uint16) bool {
 	return i < len(array) && array[i] == value
 }
 
-// arrTryOptimize tries to optimize the container
-func (c *container) arrTryOptimize() {
+// arrOptimize tries to optimize the container
+func (c *container) arrOptimize() {
 	switch {
 	case c.arrTryConvertToRun():
 	case c.Size > arrMinSize:

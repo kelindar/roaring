@@ -40,8 +40,8 @@ func (c *container) bmpHas(value uint16) bool {
 	return c.bmp().Contains(uint32(value))
 }
 
-// bmpTryOptimize tries to optimize the container
-func (c *container) bmpTryOptimize() {
+// bmpOptimize tries to optimize the container
+func (c *container) bmpOptimize() {
 	switch {
 	case c.bmpTryConvertToRun():
 	case c.Size <= arrMinSize:

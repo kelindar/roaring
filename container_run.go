@@ -74,7 +74,7 @@ func (c *container) runSet(value uint16) bool {
 		return true
 	}
 
-	c.runTryOptimize()
+	c.runOptimize()
 	return true
 }
 
@@ -214,8 +214,8 @@ func (c *container) runRemoveRunAt(index int) {
 	}
 }
 
-// runTryOptimize tries to optimize the container
-func (c *container) runTryOptimize() {
+// runOptimize tries to optimize the container
+func (c *container) runOptimize() {
 	if c.Type != typeRun || c.Size == 0 {
 		return
 	}

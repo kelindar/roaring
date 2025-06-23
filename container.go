@@ -88,10 +88,10 @@ func (c *container) isEmpty() bool {
 func (c *container) optimize() {
 	switch c.Type {
 	case typeArray:
-		c.arrTryOptimize()
+		c.arrOptimize()
 	case typeBitmap:
-		c.bmpTryOptimize()
+		c.bmpOptimize()
 	case typeRun:
-		c.runTryOptimize()
+		c.runOptimize()
 	}
 }
