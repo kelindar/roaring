@@ -110,15 +110,14 @@ func TestRandomOperations(t *testing.T) {
 
 	for i := 0; i < 1e4; i++ {
 		value := uint32(rand.IntN(10000))
-		switch rand.IntN(3) {
+		switch rand.IntN(10) {
 		case 0:
-			rb.Set(value)
-			ref.Set(value)
-		case 1:
 			rb.Remove(value)
 			ref.Remove(value)
-		case 3:
-			rb.Optimize()
+		default:
+			rb.Set(value)
+			ref.Set(value)
+
 		}
 	}
 

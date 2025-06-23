@@ -15,6 +15,7 @@ const (
 
 type container struct {
 	Type ctype  // Type of the container
+	Call uint16 // Call count
 	Size uint32 // Cardinality
 	Data []byte // Data of the container
 }
@@ -25,40 +26,38 @@ type run [2]uint16
 func (c *container) set(value uint16) (ok bool) {
 	switch c.Type {
 	case typeArray:
-		if ok = c.arrSet(value); ok && c.Size > arrMinSize {
-			c.arrToBmp()
+		if ok = c.arrSet(value); ok {
+			c.tryOptimize()
 		}
-		return
 	case typeBitmap:
-		if ok = c.bmpSet(value); ok && c.Size <= arrMinSize {
-			c.bmpToArr()
+		if ok = c.bmpSet(value); ok {
+			c.tryOptimize()
 		}
-		return
 	case typeRun:
-		if ok = c.runSet(value); ok && len(c.run()) > runMinSize {
-			c.runToBmp()
+		if ok = c.runSet(value); ok {
+			c.tryOptimize()
 		}
 	}
-	return false
+	return
 }
 
 // remove removes a value from the container and returns true if the value was removed (existed before)
 func (c *container) remove(value uint16) (ok bool) {
 	switch c.Type {
 	case typeArray:
-		return c.arrDel(value)
+		if ok = c.arrDel(value); ok {
+			c.tryOptimize()
+		}
 	case typeBitmap:
-		if ok = c.bmpDel(value); ok && c.Size <= arrMinSize {
-			c.bmpToArr()
+		if ok = c.bmpDel(value); ok {
+			c.tryOptimize()
 		}
-		return
 	case typeRun:
-		if ok = c.runDel(value); ok && len(c.run()) > runMinSize {
-			c.runToBmp()
+		if ok = c.runDel(value); ok {
+			c.tryOptimize()
 		}
-		return
 	}
-	return false
+	return
 }
 
 // contains checks if a value exists in the container
@@ -93,5 +92,12 @@ func (c *container) optimize() {
 		c.bmpOptimize()
 	case typeRun:
 		c.runOptimize()
+	}
+}
+
+// tryOptimize optimizes the container periodically
+func (c *container) tryOptimize() {
+	if c.Call++; c.Call%512 == 0 {
+		c.optimize()
 	}
 }
