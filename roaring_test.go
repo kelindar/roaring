@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
+	"github.com/kelindar/bitmap"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,26 +38,30 @@ func TestBasicOperations(t *testing.T) {
 	assert.False(t, rb.Contains(1))
 }
 
-func TestContainerTransitions(t *testing.T) {
+func TestTransitions(t *testing.T) {
 	const count = 60000
-	rb := New()
 
-	t.Run("array -> bitmap", func(t *testing.T) {
+	t.Run("array -> bitmap -> array", func(t *testing.T) {
+		rb := New()
 		for i := 0; i < count; i++ {
 			rb.Set(uint32(i))
 		}
 		assert.Equal(t, count, rb.Count())
-	})
-
-	t.Run("bitmap -> array", func(t *testing.T) {
 		for i := 0; i < count; i++ {
 			rb.Remove(uint32(i))
 		}
 		assert.Equal(t, 0, rb.Count())
 	})
-}
 
-func TestContainerOptimize(t *testing.T) {
+	t.Run("bitmap -> run", func(t *testing.T) {
+		rb := New()
+		for i := 0; i < count; i++ {
+			rb.Set(uint32(i))
+		}
+		rb.Optimize()
+		assert.Equal(t, count, rb.Count())
+	})
+
 	t.Run("array -> run", func(t *testing.T) {
 		rb := New()
 		for i := 0; i < 500; i++ {
@@ -66,14 +71,6 @@ func TestContainerOptimize(t *testing.T) {
 		assert.Equal(t, 500, rb.Count())
 	})
 
-	t.Run("bitmap -> run", func(t *testing.T) {
-		rb := New()
-		for i := 0; i < 6000; i++ {
-			rb.Set(uint32(i))
-		}
-		rb.Optimize()
-		assert.Equal(t, 6000, rb.Count())
-	})
 }
 
 // TestMixedOperations covers various operation patterns in single test
@@ -113,38 +110,28 @@ func TestMixedOperations(t *testing.T) {
 	}
 }
 
-// TestRandomOperations uses random data to catch edge cases
 func TestRandomOperations(t *testing.T) {
-	const numOps = 1000
 	rb := New()
-	setValues := make(map[uint32]bool)
+	var ref bitmap.Bitmap
 
-	for i := 0; i < numOps; i++ {
-		value := uint32(rand.IntN(10000)) // Smaller range for more collisions
-
-		if rand.IntN(2) == 0 {
-			// Set operation
+	for i := 0; i < 1e4; i++ {
+		value := uint32(rand.IntN(10000))
+		switch rand.IntN(3) {
+		case 0:
 			rb.Set(value)
-			setValues[value] = true
-		} else {
-			// Remove operation
+			ref.Set(value)
+		case 1:
 			rb.Remove(value)
-			delete(setValues, value)
-		}
-
-		// Verify consistency every 100 operations
-		if i%100 == 0 {
-			assert.Equal(t, len(setValues), rb.Count())
+			ref.Remove(value)
+		case 3:
+			rb.Optimize()
 		}
 	}
 
-	// Final verification - count should match our tracking
-	assert.Equal(t, len(setValues), rb.Count())
-
-	// Spot check some values
-	for value := range setValues {
-		assert.True(t, rb.Contains(value))
-	}
+	assert.Equal(t, ref.Count(), rb.Count())
+	ref.Range(func(x uint32) {
+		assert.True(t, rb.Contains(x))
+	})
 }
 
 // TestEdgeCases covers boundary conditions and special values
