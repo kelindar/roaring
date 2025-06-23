@@ -5,8 +5,8 @@ import (
 	"unsafe"
 )
 
-// array converts the container to an []uint16
-func (c *container) array() []uint16 {
+// arr converts the container to an []uint16
+func (c *container) arr() []uint16 {
 	if len(c.Data) == 0 {
 		return nil
 	}
@@ -14,9 +14,9 @@ func (c *container) array() []uint16 {
 	return unsafe.Slice((*uint16)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
 }
 
-// arraySet sets a value in an array container
-func (c *container) arraySet(value uint16) bool {
-	array := c.array()
+// arrSet sets a value in an array container
+func (c *container) arrSet(value uint16) bool {
+	array := c.arr()
 
 	// Check if value already exists and find insertion point
 	for i, v := range array {
@@ -26,7 +26,7 @@ func (c *container) arraySet(value uint16) bool {
 		if v > value {
 			// Insert at position i
 			c.Data = append(c.Data, 0, 0) // Add space for new uint16
-			newArray := c.array()
+			newArray := c.arr()
 			copy(newArray[i+1:], newArray[i:])
 			newArray[i] = value
 			c.Size++ // Increment cardinality
@@ -36,15 +36,15 @@ func (c *container) arraySet(value uint16) bool {
 
 	// Append at end
 	c.Data = append(c.Data, 0, 0) // Add space for new uint16
-	newArray := c.array()
+	newArray := c.arr()
 	newArray[len(newArray)-1] = value
 	c.Size++ // Increment cardinality
 	return true
 }
 
-// arrayRemove removes a value from an array container
-func (c *container) arrayRemove(value uint16) bool {
-	array := c.array()
+// arrDel removes a value from an array container
+func (c *container) arrDel(value uint16) bool {
+	array := c.arr()
 	for i, v := range array {
 		if v == value {
 			// Remove element at index i
@@ -57,9 +57,9 @@ func (c *container) arrayRemove(value uint16) bool {
 	return false
 }
 
-// arrayContains checks if a value exists in an array container
-func (c *container) arrayContains(value uint16) bool {
-	array := c.array()
+// arrHas checks if a value exists in an array container
+func (c *container) arrHas(value uint16) bool {
+	array := c.arr()
 	// Binary search for efficiency
 	i := sort.Search(len(array), func(i int) bool {
 		return array[i] >= value
@@ -67,14 +67,14 @@ func (c *container) arrayContains(value uint16) bool {
 	return i < len(array) && array[i] == value
 }
 
-// arrayShouldConvertToBitmap returns true if array should be converted to bitmap
-func (c *container) arrayShouldConvertToBitmap() bool {
+// arrShouldConvertToBitmap returns true if array should be converted to bitmap
+func (c *container) arrShouldConvertToBitmap() bool {
 	return c.Size > 4096
 }
 
-// arrayShouldConvertToRun returns true if array should be converted to run
-func (c *container) arrayShouldConvertToRun() bool {
-	array := c.array()
+// arrShouldConvertToRun returns true if array should be converted to run
+func (c *container) arrShouldConvertToRun() bool {
+	array := c.arr()
 	if len(array) < 128 {
 		return false // Need at least 128 elements to form a meaningful run
 	}
@@ -97,14 +97,14 @@ func (c *container) arrayShouldConvertToRun() bool {
 	return sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
 }
 
-// arrayToBitmap converts this container from array to bitmap
-func (c *container) arrayToBitmap() {
-	array := c.array()
+// arrToBmp converts this container from array to bitmap
+func (c *container) arrToBmp() {
+	array := c.arr()
 
 	// Create bitmap data (65536 bits = 8192 bytes)
 	c.Data = make([]byte, 8192)
 	c.Type = typeBitmap
-	bm := c.bitmap()
+	bm := c.bmp()
 
 	// Set all bits from the array
 	for _, value := range array {
@@ -115,9 +115,9 @@ func (c *container) arrayToBitmap() {
 	c.Size = uint16(bm.Count())
 }
 
-// arrayToRun converts this container from array to run
-func (c *container) arrayToRun() {
-	array := c.array()
+// arrToRun converts this container from array to run
+func (c *container) arrToRun() {
+	array := c.arr()
 	cardinality := c.Size // Preserve cardinality
 	var runs []run
 

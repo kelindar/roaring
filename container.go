@@ -17,51 +17,41 @@ type container struct {
 type run [2]uint16
 
 // set sets a value in the container and returns true if the value was added (didn't exist before)
-func (c *container) set(value uint16) bool {
+func (c *container) set(value uint16) (ok bool) {
 	switch c.Type {
 	case typeArray:
-		modified := c.arraySet(value)
-		if modified && c.arrayShouldConvertToBitmap() {
-			c.arrayToBitmap()
-		} else if modified && c.arrayShouldConvertToRun() {
-			c.arrayToRun()
+		if ok = c.arrSet(value); ok && c.arrShouldConvertToBitmap() {
+			c.arrToBmp()
 		}
-		return modified
+		return
 	case typeBitmap:
-		modified := c.bitmapSet(value)
-		if modified && c.bitmapShouldConvertToArray() {
-			c.bitmapToArray()
+		if ok = c.bmpSet(value); ok && c.bmpShouldConvertToArray() {
+			c.bmpToArr()
 		}
-		return modified
+		return
 	case typeRun:
-		return c.runSet(value)
+		if ok = c.runSet(value); ok && c.runShouldConvert() {
+			c.runToBmp()
+		}
 	}
 	return false
 }
 
 // remove removes a value from the container and returns true if the value was removed (existed before)
-func (c *container) remove(value uint16) bool {
+func (c *container) remove(value uint16) (ok bool) {
 	switch c.Type {
 	case typeArray:
-		modified := c.arrayRemove(value)
-		if modified && c.arrayShouldConvertToRun() {
-			c.arrayToRun()
-		}
-		return modified
+		return c.arrDel(value)
 	case typeBitmap:
-		modified := c.bitmapRemove(value)
-		if modified && c.bitmapShouldConvertToArray() {
-			c.bitmapToArray()
-		} else if modified && c.bitmapShouldConvertToRun() {
-			c.bitmapToRun()
+		if ok = c.bmpDel(value); ok && c.bmpShouldConvertToArray() {
+			c.bmpToArr()
 		}
-		return modified
+		return
 	case typeRun:
-		modified := c.runRemove(value)
-		if modified && c.runShouldConvert() {
-			c.runToBitmap()
+		if ok = c.runDel(value); ok && c.runShouldConvert() {
+			c.runToBmp()
 		}
-		return modified
+		return
 	}
 	return false
 }
@@ -70,11 +60,11 @@ func (c *container) remove(value uint16) bool {
 func (c *container) contains(value uint16) bool {
 	switch c.Type {
 	case typeArray:
-		return c.arrayContains(value)
+		return c.arrHas(value)
 	case typeBitmap:
-		return c.bitmapContains(value)
+		return c.bmpHas(value)
 	case typeRun:
-		return c.runContains(value)
+		return c.runHas(value)
 	}
 	return false
 }
@@ -94,38 +84,33 @@ func (c *container) isEmpty() bool {
 func (c *container) runOptimize() {
 	switch c.Type {
 	case typeArray:
-		// Check direct conversions first
-		if c.arrayShouldConvertToRun() {
-			c.arrayToRun()
-		} else if c.arrayShouldConvertToBitmap() {
-			c.arrayToBitmap()
-			if c.bitmapShouldConvertToRun() {
-				c.bitmapToRun()
-			}
+		switch {
+		case c.arrShouldConvertToRun():
+			c.arrToRun()
+		case c.arrShouldConvertToBitmap():
+			c.arrToBmp()
 		}
-	case typeBitmap:
-		if c.bitmapShouldConvertToRun() {
-			c.bitmapToRun()
-		} else if c.bitmapShouldConvertToArray() {
-			c.bitmapToArray()
-		}
-	case typeRun:
-		// Already a run container, check if it should convert to something else for efficiency
-		if c.runShouldConvert() {
-			numRuns := len(c.run())
-			cardinality := int(c.Size)
 
-			// Convert directly to array if: small cardinality and few runs
-			if cardinality <= 4096 && numRuns >= cardinality/2 {
-				c.runToArray()
-			} else {
-				// Otherwise convert to bitmap
-				c.runToBitmap()
-				// After converting to bitmap, check if array would be better
-				if c.bitmapShouldConvertToArray() {
-					c.bitmapToArray()
-				}
-			}
+	case typeBitmap:
+		switch {
+		case c.bmpShouldConvertToRun():
+			c.bmpToRun()
+		case c.bmpShouldConvertToArray():
+			c.bmpToArr()
+		}
+
+	case typeRun:
+		if !c.runShouldConvert() {
+			return // Already optimized
+		}
+
+		runs := len(c.run())
+		size := int(c.Size)
+		switch {
+		case size <= 4096 && runs >= size/2:
+			c.runToArray()
+		default:
+			c.runToBmp()
 		}
 	}
 }

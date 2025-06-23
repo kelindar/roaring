@@ -6,8 +6,8 @@ import (
 	"github.com/kelindar/bitmap"
 )
 
-// bitmap converts the container to a bitmap.Bitmap
-func (c *container) bitmap() bitmap.Bitmap {
+// bmp converts the container to a bmp.Bitmap
+func (c *container) bmp() bitmap.Bitmap {
 	if len(c.Data) == 0 {
 		return nil
 	}
@@ -15,9 +15,9 @@ func (c *container) bitmap() bitmap.Bitmap {
 	return bitmap.Bitmap(unsafe.Slice((*uint64)(unsafe.Pointer(&c.Data[0])), len(c.Data)/8))
 }
 
-// bitmapSet sets a value in a bitmap container
-func (c *container) bitmapSet(value uint16) bool {
-	bm := c.bitmap()
+// bmpSet sets a value in a bitmap container
+func (c *container) bmpSet(value uint16) bool {
+	bm := c.bmp()
 	if bm.Contains(uint32(value)) {
 		return false // Already exists
 	}
@@ -26,9 +26,9 @@ func (c *container) bitmapSet(value uint16) bool {
 	return true
 }
 
-// bitmapRemove removes a value from a bitmap container
-func (c *container) bitmapRemove(value uint16) bool {
-	bm := c.bitmap()
+// bmpDel removes a value from a bitmap container
+func (c *container) bmpDel(value uint16) bool {
+	bm := c.bmp()
 	if bm.Contains(uint32(value)) {
 		bm.Remove(uint32(value))
 		c.Size = uint16(bm.Count()) // Update cardinality from bitmap
@@ -37,24 +37,24 @@ func (c *container) bitmapRemove(value uint16) bool {
 	return false
 }
 
-// bitmapContains checks if a value exists in a bitmap container
-func (c *container) bitmapContains(value uint16) bool {
-	bm := c.bitmap()
+// bmpHas checks if a value exists in a bitmap container
+func (c *container) bmpHas(value uint16) bool {
+	bm := c.bmp()
 	return bm.Contains(uint32(value))
 }
 
-// bitmapShouldConvertToArray returns true if bitmap should be converted to array
-func (c *container) bitmapShouldConvertToArray() bool {
+// bmpShouldConvertToArray returns true if bitmap should be converted to array
+func (c *container) bmpShouldConvertToArray() bool {
 	return c.Size <= 4096
 }
 
-// bitmapShouldConvertToRun returns true if bitmap should be converted to run
-func (c *container) bitmapShouldConvertToRun() bool {
+// bmpShouldConvertToRun returns true if bitmap should be converted to run
+func (c *container) bmpShouldConvertToRun() bool {
 	if c.Size == 0 {
 		return false
 	}
 
-	numRuns := c.bitmapNumberOfRuns()
+	numRuns := c.bmpNumberOfRuns()
 	cardinality := int(c.Size)
 
 	// Very conservative thresholds to avoid premature conversion
@@ -72,14 +72,14 @@ func (c *container) bitmapShouldConvertToRun() bool {
 		sizeAsRunContainer < sizeAsArrayContainer/2
 }
 
-// bitmapNumberOfRuns counts consecutive runs in the bitmap
+// bmpNumberOfRuns counts consecutive runs in the bitmap
 // This implements the same logic as the official RoaringBitmap implementation
-func (c *container) bitmapNumberOfRuns() int {
+func (c *container) bmpNumberOfRuns() int {
 	if c.Size == 0 {
 		return 0
 	}
 
-	bm := c.bitmap()
+	bm := c.bmp()
 	numRuns := 0
 
 	// Scan through all 65536 bits to count runs
@@ -100,9 +100,9 @@ func (c *container) bitmapNumberOfRuns() int {
 	return numRuns
 }
 
-// bitmapToArray converts this container from bitmap to array
-func (c *container) bitmapToArray() {
-	bm := c.bitmap()
+// bmpToArr converts this container from bitmap to array
+func (c *container) bmpToArr() {
+	bm := c.bmp()
 	var values []uint16
 
 	// Collect all set bits
@@ -116,13 +116,13 @@ func (c *container) bitmapToArray() {
 	c.Data = make([]byte, len(values)*2)
 	c.Type = typeArray
 	c.Size = uint16(len(values)) // Set cardinality
-	array := c.array()
+	array := c.arr()
 	copy(array, values)
 }
 
-// bitmapToRun converts this container from bitmap to run
-func (c *container) bitmapToRun() {
-	bm := c.bitmap()
+// bmpToRun converts this container from bitmap to run
+func (c *container) bmpToRun() {
+	bm := c.bmp()
 	cardinality := c.Size // Preserve cardinality
 	var runs []run
 

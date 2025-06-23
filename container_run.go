@@ -76,15 +76,15 @@ func (c *container) runSet(value uint16) bool {
 
 	// Convert to bitmap if: too many runs or high density
 	if numRuns > 2048 || cardinality > 32768 {
-		c.runToBitmap()
+		c.runToBmp()
 		return true
 	}
 
 	return true
 }
 
-// runRemove removes a value from a run container using binary search
-func (c *container) runRemove(value uint16) bool {
+// runDel removes a value from a run container using binary search
+func (c *container) runDel(value uint16) bool {
 	runs := c.run()
 
 	if len(runs) == 0 {
@@ -144,8 +144,8 @@ func (c *container) runRemove(value uint16) bool {
 	return true
 }
 
-// runContains checks if a value exists in a run container using binary search
-func (c *container) runContains(value uint16) bool {
+// runHas checks if a value exists in a run container using binary search
+func (c *container) runHas(value uint16) bool {
 	runs := c.run()
 
 	if len(runs) == 0 {
@@ -259,18 +259,18 @@ func (c *container) runToArray() {
 	c.Data = make([]byte, len(values)*2)
 	c.Type = typeArray
 	c.Size = uint16(len(values)) // Set cardinality
-	array := c.array()
+	array := c.arr()
 	copy(array, values)
 }
 
-// runToBitmap converts this container from run to bitmap
-func (c *container) runToBitmap() {
+// runToBmp converts this container from run to bitmap
+func (c *container) runToBmp() {
 	runs := c.run()
 
 	// Create bitmap data (65536 bits = 8192 bytes)
 	c.Data = make([]byte, 8192)
 	c.Type = typeBitmap
-	bm := c.bitmap()
+	bm := c.bmp()
 
 	// Set all bits from the runs
 	for _, r := range runs {
