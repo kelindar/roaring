@@ -54,14 +54,21 @@ func TestTransitions(t *testing.T) {
 		assert.Equal(t, 0, rb.Count())
 	})
 
-	t.Run("bitmap -> run", func(t *testing.T) {
+	t.Run("bitmap -> run -> bitmap", func(t *testing.T) {
 		rb := New()
 		for i := 0; i < count; i++ {
 			rb.Set(uint32(i))
 			assert.True(t, rb.Contains(uint32(i)))
 		}
+
 		rb.Optimize()
 		assert.Equal(t, count, rb.Count())
+
+		for i := 0; i < count; i++ {
+			rb.Remove(uint32(i))
+			assert.False(t, rb.Contains(uint32(i)))
+		}
+		assert.Equal(t, 0, rb.Count())
 	})
 
 	t.Run("array -> run", func(t *testing.T) {

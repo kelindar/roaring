@@ -1,5 +1,10 @@
 package roaring
 
+const (
+	arrMinSize = 4096
+	runMinSize = 100
+)
+
 type ctype byte
 
 const (
@@ -100,16 +105,10 @@ func (c *container) runOptimize() {
 		}
 
 	case typeRun:
-		if !c.runShouldConvert() {
-			return // Already optimized
-		}
-
-		runs := len(c.run())
-		size := int(c.Size)
 		switch {
-		case size <= 4096 && runs >= size/2:
+		case c.Size <= arrMinSize:
 			c.runToArray()
-		default:
+		case len(c.run()) > runMinSize:
 			c.runToBmp()
 		}
 	}

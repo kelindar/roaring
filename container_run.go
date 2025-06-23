@@ -228,12 +228,12 @@ func (c *container) runShouldConvert() bool {
 	cardinality := int(c.Size)
 
 	// Convert to bitmap if we have too many runs (run container becomes inefficient)
-	if numRuns > 100 {
+	if numRuns > runMinSize {
 		return true
 	}
 
 	// Convert to bitmap if density is high (similar to array threshold)
-	if cardinality > 4096 {
+	if cardinality > arrMinSize {
 		return true
 	}
 

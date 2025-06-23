@@ -45,7 +45,7 @@ func (c *container) bmpHas(value uint16) bool {
 
 // bmpShouldConvertToArray returns true if bitmap should be converted to array
 func (c *container) bmpShouldConvertToArray() bool {
-	return c.Size <= 4096
+	return c.Size <= arrMinSize
 }
 
 // bmpShouldConvertToRun returns true if bitmap should be converted to run
@@ -82,81 +82,76 @@ func (c *container) bmpNumberOfRuns() int {
 	bm := c.bmp()
 	numRuns := 0
 
-	// Scan through all 65536 bits to count runs
-	inRun := false
-	for i := uint32(0); i < 65536; i++ {
-		isSet := bm.Contains(i)
+	// Use Range to iterate only over set bits
+	var lastValue uint16
+	var inRun bool
 
-		if isSet && !inRun {
-			// Start of a new run
+	bm.Range(func(value uint32) {
+		v := uint16(value)
+		if !inRun {
+			// Start of first run
 			numRuns++
 			inRun = true
-		} else if !isSet && inRun {
-			// End of current run
-			inRun = false
+		} else if v != lastValue+1 {
+			// Gap found, start new run
+			numRuns++
 		}
-	}
+		lastValue = v
+	})
 
 	return numRuns
 }
 
 // bmpToArr converts this container from bitmap to array
 func (c *container) bmpToArr() {
-	bm := c.bmp()
-	var values []uint16
-
-	// Collect all set bits
-	for i := uint32(0); i < 65536; i++ {
-		if bm.Contains(i) {
-			values = append(values, uint16(i))
-		}
-	}
+	bmp := c.bmp()
+	out := make([]uint16, 0, bmp.Count())
+	bmp.Range(func(value uint32) {
+		out = append(out, uint16(value))
+	})
 
 	// Create new array data
-	c.Data = make([]byte, len(values)*2)
+	c.Data = make([]byte, len(out)*2)
 	c.Type = typeArray
-	c.Size = uint16(len(values)) // Set cardinality
+	c.Size = uint16(len(out)) // Set cardinality
 	array := c.arr()
-	copy(array, values)
+	copy(array, out)
 }
 
 // bmpToRun converts this container from bitmap to run
 func (c *container) bmpToRun() {
 	bm := c.bmp()
-	cardinality := c.Size // Preserve cardinality
 	var runs []run
 
-	// Find consecutive ranges in the bitmap
-	var currentStart uint16 = 0
-	var inRun bool = false
+	// Use Range to iterate only over set bits
+	var curr uint16
+	var last uint16
+	var inRun bool
 
-	for i := uint32(0); i < 65536; i++ {
-		value := uint16(i)
-		if bm.Contains(i) {
-			if !inRun {
-				// Start of new run
-				currentStart = value
-				inRun = true
-			}
-			// Continue run
-		} else {
-			if inRun {
-				// End of current run
-				runs = append(runs, run{currentStart, value - 1})
-				inRun = false
-			}
+	bm.Range(func(value uint32) {
+		v := uint16(value)
+		switch {
+		case !inRun:
+			curr = v
+			last = v
+			inRun = true
+		case v == last+1:
+			last = v
+		default:
+			runs = append(runs, run{curr, last})
+			curr = v
+			last = v
 		}
-	}
+	})
 
-	// Handle case where last run extends to the end
+	// Handle the last run if we were in one
 	if inRun {
-		runs = append(runs, run{currentStart, 65535})
+		runs = append(runs, run{curr, last})
 	}
 
 	// Create new run data
 	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
 	c.Type = typeRun
-	c.Size = cardinality // Restore cardinality
 	newRuns := c.run()
 	copy(newRuns, runs)
 }

@@ -69,7 +69,7 @@ func (c *container) arrHas(value uint16) bool {
 
 // arrShouldConvertToBitmap returns true if array should be converted to bitmap
 func (c *container) arrShouldConvertToBitmap() bool {
-	return c.Size > 4096
+	return c.Size > arrMinSize
 }
 
 // arrShouldConvertToRun returns true if array should be converted to run
