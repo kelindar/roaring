@@ -62,7 +62,6 @@ func (c *container) runSet(value uint16) bool {
 	}
 
 	c.Size++
-	c.runOptimize()
 	return true
 }
 
@@ -158,39 +157,39 @@ func (c *container) runOptimize() {
 
 // runToArray converts this container from run to array
 func (c *container) runToArray() {
-	runs := c.run()
-	var values []uint16
+	src := c.run()
 
-	for _, r := range runs {
+	// Create new array data
+	c.Data = make([]byte, c.Size*2)
+	c.Type = typeArray
+	dst := c.arr()
+
+	// Copy all values to the array
+	for _, r := range src {
 		for value := r[0]; value <= r[1]; value++ {
-			values = append(values, value)
+			dst = append(dst, value)
 			if value == r[1] {
 				break // Prevent uint16 overflow when r[1] is 65535
 			}
 		}
 	}
-
-	c.Data = make([]byte, len(values)*2)
-	c.Type = typeArray
-	c.Size = uint32(len(values))
-	copy(c.arr(), values)
 }
 
 // runToBmp converts this container from run to bitmap
 func (c *container) runToBmp() {
-	runs := c.run()
+	src := c.run()
+
+	// Create bitmap data (65536 bits = 8192 bytes)
 	c.Data = make([]byte, 8192)
 	c.Type = typeBitmap
-	bm := c.bmp()
+	dst := c.bmp()
 
-	for _, r := range runs {
+	for _, r := range src {
 		for i := r[0]; i <= r[1]; i++ {
-			bm.Set(uint32(i))
+			dst.Set(uint32(i))
 			if i == r[1] {
 				break // Prevent uint16 overflow when r[1] is 65535
 			}
 		}
 	}
-
-	c.Size = uint32(bm.Count())
 }

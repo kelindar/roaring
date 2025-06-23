@@ -128,18 +128,15 @@ func (c *container) arrTryConvertToRun() bool {
 
 // arrToBmp converts this container from array to bitmap
 func (c *container) arrToBmp() {
-	array := c.arr()
+	src := c.arr()
 
 	// Create bitmap data (65536 bits = 8192 bytes)
 	c.Data = make([]byte, 8192)
 	c.Type = typeBitmap
-	bm := c.bmp()
+	dst := c.bmp()
 
-	// Set all bits from the array
-	for _, value := range array {
-		bm.Set(uint32(value))
+	// Copy all values to the bitmap
+	for _, value := range src {
+		dst.Set(uint32(value))
 	}
-
-	// Update cardinality from bitmap
-	c.Size = uint32(bm.Count())
 }

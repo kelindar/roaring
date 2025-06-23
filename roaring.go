@@ -16,20 +16,18 @@ func New() *Bitmap {
 
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
-	high := uint16(x >> 16)
-	low := uint16(x & 0xFFFF)
-
-	c, exists := rb.containers[high]
+	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
+	c, exists := rb.containers[hi]
 	if !exists {
 		c = &container{
 			Type: typeArray,
 			Size: 0,               // Start with zero cardinality
 			Data: make([]byte, 0), // Start empty
 		}
-		rb.containers[high] = c
+		rb.containers[hi] = c
 	}
 
-	c.set(low)
+	c.set(lo)
 }
 
 // Remove removes the bit x from the bitmap, but does not shrink it.
@@ -50,15 +48,13 @@ func (rb *Bitmap) Remove(x uint32) {
 
 // Contains checks whether a value is contained in the bitmap or not.
 func (rb *Bitmap) Contains(x uint32) bool {
-	high := uint16(x >> 16)
-	low := uint16(x & 0xFFFF)
-
-	c, exists := rb.containers[high]
+	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
+	c, exists := rb.containers[hi]
 	if !exists {
 		return false
 	}
 
-	return c.contains(low)
+	return c.contains(lo)
 }
 
 // Count returns the total number of bits set to 1 in the bitmap

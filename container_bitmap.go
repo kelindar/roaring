@@ -115,16 +115,15 @@ func (c *container) bmpTryConvertToRun() bool {
 
 // bmpToArr converts this container from bitmap to array
 func (c *container) bmpToArr() {
-	bmp := c.bmp()
-	out := make([]uint16, 0, bmp.Count())
-	bmp.Range(func(value uint32) {
-		out = append(out, uint16(value))
-	})
+	src := c.bmp()
 
 	// Create new array data
-	c.Data = make([]byte, len(out)*2)
+	c.Data = make([]byte, src.Count()*2)
 	c.Type = typeArray
-	c.Size = uint32(len(out)) // Set cardinality
-	array := c.arr()
-	copy(array, out)
+
+	// Copy all values to the array
+	dst := c.arr()
+	src.Range(func(value uint32) {
+		dst = append(dst, uint16(value))
+	})
 }

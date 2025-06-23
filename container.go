@@ -1,8 +1,9 @@
 package roaring
 
 const (
-	arrMinSize = 4096
-	runMinSize = 100
+	arrMinSize    = 4096
+	runMinSize    = 100
+	optimizeEvery = 512 // calls
 )
 
 type ctype byte
@@ -97,7 +98,7 @@ func (c *container) optimize() {
 
 // tryOptimize optimizes the container periodically
 func (c *container) tryOptimize() {
-	if c.Call++; c.Call%512 == 0 {
+	if c.Call++; c.Call%optimizeEvery == 0 {
 		c.optimize()
 	}
 }
