@@ -4,13 +4,13 @@ import "io"
 
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	containers map[uint16]container
+	containers map[uint16]*container
 }
 
 // New creates a new empty roaring bitmap
 func New() *Bitmap {
 	return &Bitmap{
-		containers: make(map[uint16]container),
+		containers: make(map[uint16]*container),
 	}
 }
 
@@ -21,8 +21,7 @@ func (rb *Bitmap) Set(x uint32) {
 
 	c, exists := rb.containers[high]
 	if !exists {
-		// Create new empty array container for sparse data
-		c = container{
+		c = &container{
 			Type: typeArray,
 			Size: 0,               // Start with zero cardinality
 			Data: make([]byte, 0), // Start empty
@@ -77,7 +76,7 @@ func (rb *Bitmap) Count() int {
 
 // Clear clears the bitmap and resizes it to zero.
 func (rb *Bitmap) Clear() {
-	rb.containers = make(map[uint16]container)
+	rb.containers = make(map[uint16]*container)
 }
 
 // Optimize optimizes all containers to use the most efficient representation.

@@ -1,7 +1,6 @@
 package roaring
 
 import (
-	"math/bits"
 	"unsafe"
 
 	"github.com/kelindar/bitmap"
@@ -124,58 +123,4 @@ func (c *container) bmpToArr() {
 	c.Size = uint16(len(out)) // Set cardinality
 	array := c.arr()
 	copy(array, out)
-}
-
-// bmpNumberOfRunsFast counts runs efficiently using bit manipulation
-// Based on the official RoaringBitmap implementation - faster than iteration
-//
-// TWO OPTIMIZATION APPROACHES AVAILABLE:
-// 1. Fast counting (this function): Count runs without building them using bit manipulation
-//   - Very fast for analysis-only scenarios
-//   - Used by official RoaringBitmap
-//
-// 2. Single-pass build+convert (bmpTryConvertToRun): Build runs while deciding
-//   - Eliminates double iteration when conversion is needed
-//   - More memory efficient when actually converting
-func (c *container) bmpNumberOfRunsFast() int {
-	if c.Size == 0 {
-		return 0
-	}
-
-	bmp := c.bmp()
-	var numRuns uint64
-
-	// Get the raw bitmap data for direct bit manipulation
-	data := bmp
-
-	// Process each 64-bit word
-	var nextWord uint64
-	if len(data) > 0 {
-		nextWord = data[0]
-	}
-
-	for i := 0; i < len(data)-1; i++ {
-		word := nextWord
-		nextWord = data[i+1]
-
-		// Count transitions from 0->1 within this word
-		numRuns += uint64(bits.OnesCount64((^word) & (word << 1)))
-
-		// Check for run boundary between words
-		// If current word ends with 1 and next starts with 0, we have a run end
-		numRuns += (word >> 63) &^ (nextWord & 1)
-	}
-
-	// Handle the last word
-	if len(data) > 0 {
-		word := nextWord
-		numRuns += uint64(bits.OnesCount64((^word) & (word << 1)))
-
-		// If the last bit is set, we have a run ending at the boundary
-		if (word & 0x8000000000000000) != 0 {
-			numRuns++
-		}
-	}
-
-	return int(numRuns)
 }

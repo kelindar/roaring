@@ -60,7 +60,6 @@ func (c *container) arrDel(value uint16) bool {
 // arrHas checks if a value exists in an array container
 func (c *container) arrHas(value uint16) bool {
 	array := c.arr()
-	// Binary search for efficiency
 	i := sort.Search(len(array), func(i int) bool {
 		return array[i] >= value
 	})
@@ -74,12 +73,6 @@ func (c *container) arrShouldConvertToBitmap() bool {
 
 // arrTryConvertToRun attempts to convert array to run in a single pass
 // Returns true if conversion was performed, false otherwise
-//
-// OPTIMIZATION APPROACH:
-// Single-pass build+convert: Build runs while deciding in one iteration
-// - Eliminates double iteration when conversion is needed
-// - More memory efficient when actually converting
-// - Alternative would be separate counting pass + conversion pass like official RoaringBitmap
 func (c *container) arrTryConvertToRun() bool {
 	array := c.arr()
 	if len(array) < 128 {

@@ -90,16 +90,14 @@ func (c *container) runOptimize() {
 	switch c.Type {
 	case typeArray:
 		switch {
+		case c.arrTryConvertToRun():
 		case c.arrShouldConvertToBitmap():
 			c.arrToBmp()
-		case c.arrTryConvertToRun():
-			// Conversion already performed in arrTryConvertToRun()
 		}
 
 	case typeBitmap:
 		switch {
 		case c.bmpTryConvertToRun():
-			// Conversion already performed in bmpTryConvertToRun()
 		case c.bmpShouldConvertToArray():
 			c.bmpToArr()
 		}
