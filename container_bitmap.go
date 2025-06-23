@@ -17,21 +17,19 @@ func (c *container) bmp() bitmap.Bitmap {
 
 // bmpSet sets a value in a bitmap container
 func (c *container) bmpSet(value uint16) bool {
-	bm := c.bmp()
-	if bm.Contains(uint32(value)) {
-		return false // Already exists
+	if b := c.bmp(); !b.Contains(uint32(value)) {
+		b.Set(uint32(value))
+		c.Size++
+		return true
 	}
-	bm.Set(uint32(value))
-	c.Size = uint16(bm.Count()) // Update cardinality from bitmap
-	return true
+	return false
 }
 
 // bmpDel removes a value from a bitmap container
 func (c *container) bmpDel(value uint16) bool {
-	bm := c.bmp()
-	if bm.Contains(uint32(value)) {
-		bm.Remove(uint32(value))
-		c.Size = uint16(bm.Count()) // Update cardinality from bitmap
+	if b := c.bmp(); b.Contains(uint32(value)) {
+		b.Remove(uint32(value))
+		c.Size--
 		return true
 	}
 	return false
@@ -39,8 +37,7 @@ func (c *container) bmpDel(value uint16) bool {
 
 // bmpHas checks if a value exists in a bitmap container
 func (c *container) bmpHas(value uint16) bool {
-	bm := c.bmp()
-	return bm.Contains(uint32(value))
+	return c.bmp().Contains(uint32(value))
 }
 
 // bmpShouldConvertToArray returns true if bitmap should be converted to array
