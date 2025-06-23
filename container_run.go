@@ -1,5 +1,16 @@
 package roaring
 
+import "unsafe"
+
+// run converts the container to a []run
+func (c *container) run() []run {
+	if len(c.Data) == 0 {
+		return nil
+	}
+
+	return unsafe.Slice((*run)(unsafe.Pointer(&c.Data[0])), len(c.Data)/4)
+}
+
 // runSet sets a value in a run container using binary search and efficient boundary cases
 func (c *container) runSet(value uint16) bool {
 	runs := c.run()
@@ -59,13 +70,13 @@ func (c *container) runSet(value uint16) bool {
 
 	// Convert to array if: small cardinality and few runs
 	if cardinality <= 4096 && numRuns >= cardinality/2 {
-		c.arrayConvertFromRun()
+		c.runToArray()
 		return true
 	}
 
 	// Convert to bitmap if: too many runs or high density
 	if numRuns > 2048 || cardinality > 32768 {
-		c.bitmapConvertFromRun()
+		c.runToBitmap()
 		return true
 	}
 
@@ -229,83 +240,48 @@ func (c *container) runShouldConvert() bool {
 	return false
 }
 
-// runConvertFromBitmap converts this container from bitmap to run
-func (c *container) runConvertFromBitmap() {
-	bm := c.bitmap()
-	cardinality := c.Size // Preserve cardinality
-	var runs []run
+// runToArray converts this container from run to array
+func (c *container) runToArray() {
+	runs := c.run()
+	var values []uint16
 
-	// Find consecutive ranges in the bitmap
-	var currentStart uint16 = 0
-	var inRun bool = false
-
-	for i := uint32(0); i < 65536; i++ {
-		value := uint16(i)
-		if bm.Contains(i) {
-			if !inRun {
-				// Start of new run
-				currentStart = value
-				inRun = true
-			}
-			// Continue run
-		} else {
-			if inRun {
-				// End of current run
-				runs = append(runs, run{currentStart, value - 1})
-				inRun = false
+	// Extract all values from runs
+	for _, r := range runs {
+		for value := r[0]; value <= r[1]; value++ {
+			values = append(values, value)
+			if value == r[1] {
+				break // Prevent uint16 overflow when r[1] is 65535
 			}
 		}
 	}
 
-	// Handle case where last run extends to the end
-	if inRun {
-		runs = append(runs, run{currentStart, 65535})
-	}
-
-	// Create new run data
-	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
-	c.Type = typeRun
-	c.Size = cardinality // Restore cardinality
-	newRuns := c.run()
-	copy(newRuns, runs)
+	// Create new array data
+	c.Data = make([]byte, len(values)*2)
+	c.Type = typeArray
+	c.Size = uint16(len(values)) // Set cardinality
+	array := c.array()
+	copy(array, values)
 }
 
-// runConvertFromArray converts this container from array to run
-func (c *container) runConvertFromArray() {
-	array := c.array()
-	cardinality := c.Size // Preserve cardinality
-	var runs []run
+// runToBitmap converts this container from run to bitmap
+func (c *container) runToBitmap() {
+	runs := c.run()
 
-	if len(array) == 0 {
-		c.Data = nil
-		c.Type = typeRun
-		c.Size = 0
-		return
-	}
+	// Create bitmap data (65536 bits = 8192 bytes)
+	c.Data = make([]byte, 8192)
+	c.Type = typeBitmap
+	bm := c.bitmap()
 
-	// Find consecutive ranges in the sorted array
-	currentStart := array[0]
-	currentEnd := array[0]
-
-	for i := 1; i < len(array); i++ {
-		if array[i] == currentEnd+1 {
-			// Continue current run
-			currentEnd = array[i]
-		} else {
-			// End current run and start new one
-			runs = append(runs, run{currentStart, currentEnd})
-			currentStart = array[i]
-			currentEnd = array[i]
+	// Set all bits from the runs
+	for _, r := range runs {
+		for i := r[0]; i <= r[1]; i++ {
+			bm.Set(uint32(i))
+			if i == r[1] {
+				break // Prevent uint16 overflow when r[1] is 65535
+			}
 		}
 	}
 
-	// Add the final run
-	runs = append(runs, run{currentStart, currentEnd})
-
-	// Create new run data
-	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
-	c.Type = typeRun
-	c.Size = cardinality // Restore cardinality
-	newRuns := c.run()
-	copy(newRuns, runs)
+	// Update cardinality from bitmap
+	c.Size = uint16(bm.Count())
 }

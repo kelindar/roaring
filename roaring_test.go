@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestBasicOperations covers 80% of use cases: Set, Contains, Remove, Count, Clear
 func TestBasicOperations(t *testing.T) {
 	rb := New()
 
@@ -45,10 +44,12 @@ func TestTransitions(t *testing.T) {
 		rb := New()
 		for i := 0; i < count; i++ {
 			rb.Set(uint32(i))
+			assert.True(t, rb.Contains(uint32(i)))
 		}
 		assert.Equal(t, count, rb.Count())
 		for i := 0; i < count; i++ {
 			rb.Remove(uint32(i))
+			assert.False(t, rb.Contains(uint32(i)))
 		}
 		assert.Equal(t, 0, rb.Count())
 	})
@@ -57,6 +58,7 @@ func TestTransitions(t *testing.T) {
 		rb := New()
 		for i := 0; i < count; i++ {
 			rb.Set(uint32(i))
+			assert.True(t, rb.Contains(uint32(i)))
 		}
 		rb.Optimize()
 		assert.Equal(t, count, rb.Count())
@@ -66,6 +68,7 @@ func TestTransitions(t *testing.T) {
 		rb := New()
 		for i := 0; i < 500; i++ {
 			rb.Set(uint32(i))
+			assert.True(t, rb.Contains(uint32(i)))
 		}
 		rb.Optimize()
 		assert.Equal(t, 500, rb.Count())

@@ -1,6 +1,18 @@
 package roaring
 
-import "sort"
+import (
+	"sort"
+	"unsafe"
+)
+
+// array converts the container to an []uint16
+func (c *container) array() []uint16 {
+	if len(c.Data) == 0 {
+		return nil
+	}
+
+	return unsafe.Slice((*uint16)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
+}
 
 // arraySet sets a value in an array container
 func (c *container) arraySet(value uint16) bool {
@@ -85,45 +97,60 @@ func (c *container) arrayShouldConvertToRun() bool {
 	return sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
 }
 
-// arrayConvertFromBitmap converts this container from bitmap to array
-func (c *container) arrayConvertFromBitmap() {
-	bm := c.bitmap()
-	var values []uint16
+// arrayToBitmap converts this container from array to bitmap
+func (c *container) arrayToBitmap() {
+	array := c.array()
 
-	// Collect all set bits
-	for i := uint32(0); i < 65536; i++ {
-		if bm.Contains(i) {
-			values = append(values, uint16(i))
-		}
+	// Create bitmap data (65536 bits = 8192 bytes)
+	c.Data = make([]byte, 8192)
+	c.Type = typeBitmap
+	bm := c.bitmap()
+
+	// Set all bits from the array
+	for _, value := range array {
+		bm.Set(uint32(value))
 	}
 
-	// Create new array data
-	c.Data = make([]byte, len(values)*2)
-	c.Type = typeArray
-	c.Size = uint16(len(values)) // Set cardinality
-	array := c.array()
-	copy(array, values)
+	// Update cardinality from bitmap
+	c.Size = uint16(bm.Count())
 }
 
-// arrayConvertFromRun converts this container from run to array
-func (c *container) arrayConvertFromRun() {
-	runs := c.run()
-	var values []uint16
+// arrayToRun converts this container from array to run
+func (c *container) arrayToRun() {
+	array := c.array()
+	cardinality := c.Size // Preserve cardinality
+	var runs []run
 
-	// Extract all values from runs
-	for _, r := range runs {
-		for value := r[0]; value <= r[1]; value++ {
-			values = append(values, value)
-			if value == r[1] {
-				break // Prevent uint16 overflow when r[1] is 65535
-			}
+	if len(array) == 0 {
+		c.Data = nil
+		c.Type = typeRun
+		c.Size = 0
+		return
+	}
+
+	// Find consecutive ranges in the sorted array
+	currentStart := array[0]
+	currentEnd := array[0]
+
+	for i := 1; i < len(array); i++ {
+		if array[i] == currentEnd+1 {
+			// Continue current run
+			currentEnd = array[i]
+		} else {
+			// End current run and start new one
+			runs = append(runs, run{currentStart, currentEnd})
+			currentStart = array[i]
+			currentEnd = array[i]
 		}
 	}
 
-	// Create new array data
-	c.Data = make([]byte, len(values)*2)
-	c.Type = typeArray
-	c.Size = uint16(len(values)) // Set cardinality
-	array := c.array()
-	copy(array, values)
+	// Add the final run
+	runs = append(runs, run{currentStart, currentEnd})
+
+	// Create new run data
+	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
+	c.Type = typeRun
+	c.Size = cardinality // Restore cardinality
+	newRuns := c.run()
+	copy(newRuns, runs)
 }

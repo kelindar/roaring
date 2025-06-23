@@ -1,5 +1,20 @@
 package roaring
 
+import (
+	"unsafe"
+
+	"github.com/kelindar/bitmap"
+)
+
+// bitmap converts the container to a bitmap.Bitmap
+func (c *container) bitmap() bitmap.Bitmap {
+	if len(c.Data) == 0 {
+		return nil
+	}
+
+	return bitmap.Bitmap(unsafe.Slice((*uint64)(unsafe.Pointer(&c.Data[0])), len(c.Data)/8))
+}
+
 // bitmapSet sets a value in a bitmap container
 func (c *container) bitmapSet(value uint16) bool {
 	bm := c.bitmap()
@@ -85,43 +100,63 @@ func (c *container) bitmapNumberOfRuns() int {
 	return numRuns
 }
 
-// bitmapConvertFromArray converts this container from array to bitmap
-func (c *container) bitmapConvertFromArray() {
-	array := c.array()
-
-	// Create bitmap data (65536 bits = 8192 bytes)
-	c.Data = make([]byte, 8192)
-	c.Type = typeBitmap
+// bitmapToArray converts this container from bitmap to array
+func (c *container) bitmapToArray() {
 	bm := c.bitmap()
+	var values []uint16
 
-	// Set all bits from the array
-	for _, value := range array {
-		bm.Set(uint32(value))
+	// Collect all set bits
+	for i := uint32(0); i < 65536; i++ {
+		if bm.Contains(i) {
+			values = append(values, uint16(i))
+		}
 	}
 
-	// Update cardinality from bitmap
-	c.Size = uint16(bm.Count())
+	// Create new array data
+	c.Data = make([]byte, len(values)*2)
+	c.Type = typeArray
+	c.Size = uint16(len(values)) // Set cardinality
+	array := c.array()
+	copy(array, values)
 }
 
-// bitmapConvertFromRun converts this container from run to bitmap
-func (c *container) bitmapConvertFromRun() {
-	runs := c.run()
-
-	// Create bitmap data (65536 bits = 8192 bytes)
-	c.Data = make([]byte, 8192)
-	c.Type = typeBitmap
+// bitmapToRun converts this container from bitmap to run
+func (c *container) bitmapToRun() {
 	bm := c.bitmap()
+	cardinality := c.Size // Preserve cardinality
+	var runs []run
 
-	// Set all bits from the runs
-	for _, r := range runs {
-		for i := r[0]; i <= r[1]; i++ {
-			bm.Set(uint32(i))
-			if i == r[1] {
-				break // Prevent uint16 overflow when r[1] is 65535
+	// Find consecutive ranges in the bitmap
+	var currentStart uint16 = 0
+	var inRun bool = false
+
+	for i := uint32(0); i < 65536; i++ {
+		value := uint16(i)
+		if bm.Contains(i) {
+			if !inRun {
+				// Start of new run
+				currentStart = value
+				inRun = true
+			}
+			// Continue run
+		} else {
+			if inRun {
+				// End of current run
+				runs = append(runs, run{currentStart, value - 1})
+				inRun = false
 			}
 		}
 	}
 
-	// Update cardinality from bitmap
-	c.Size = uint16(bm.Count())
+	// Handle case where last run extends to the end
+	if inRun {
+		runs = append(runs, run{currentStart, 65535})
+	}
+
+	// Create new run data
+	c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
+	c.Type = typeRun
+	c.Size = cardinality // Restore cardinality
+	newRuns := c.run()
+	copy(newRuns, runs)
 }
