@@ -1,7 +1,6 @@
 package roaring
 
 import (
-	"sort"
 	"unsafe"
 )
 
@@ -14,21 +13,42 @@ func (c *container) arr() []uint16 {
 	return unsafe.Slice((*uint16)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
 }
 
+// arrBinarySearch performs optimized binary search in array container
+// Returns the index where value should be inserted and whether it exists
+func (c *container) arrBinarySearch(value uint16) (int, bool) {
+	array := c.arr()
+	len := len(array)
+	
+	// Quick bounds check for early exit
+	if len == 0 || value < array[0] {
+		return 0, false
+	}
+	if value > array[len-1] {
+		return len, false
+	}
+	
+	left, right := 0, len
+	for left < right {
+		mid := (left + right) / 2
+		if array[mid] < value {
+			left = mid + 1
+		} else {
+			right = mid
+		}
+	}
+	
+	return left, left < len && array[left] == value
+}
+
 // arrSet sets a value in an array container
 func (c *container) arrSet(value uint16) bool {
-	array := c.arr()
-
-	// Use binary search to find insertion point
-	idx := sort.Search(len(array), func(i int) bool {
-		return array[i] >= value
-	})
-
-	// Check if value already exists
-	if idx < len(array) && array[idx] == value {
+	idx, exists := c.arrBinarySearch(value)
+	if exists {
 		return false // Already exists
 	}
 
 	// Insert at position idx more efficiently
+	array := c.arr()
 	oldLen := len(array)
 	c.Data = append(c.Data, 0, 0) // Add space for new uint16
 	newArray := c.arr()
@@ -44,19 +64,13 @@ func (c *container) arrSet(value uint16) bool {
 
 // arrDel removes a value from an array container
 func (c *container) arrDel(value uint16) bool {
-	array := c.arr()
-
-	// Use binary search to find the value
-	idx := sort.Search(len(array), func(i int) bool {
-		return array[i] >= value
-	})
-
-	// Check if value exists
-	if idx >= len(array) || array[idx] != value {
+	idx, exists := c.arrBinarySearch(value)
+	if !exists {
 		return false
 	}
 
 	// Remove element at index idx
+	array := c.arr()
 	copy(array[idx:], array[idx+1:])
 	c.Data = c.Data[:len(c.Data)-2] // Shrink by one uint16
 	c.Size--                        // Decrement cardinality
@@ -65,11 +79,8 @@ func (c *container) arrDel(value uint16) bool {
 
 // arrHas checks if a value exists in an array container
 func (c *container) arrHas(value uint16) bool {
-	array := c.arr()
-	i := sort.Search(len(array), func(i int) bool {
-		return array[i] >= value
-	})
-	return i < len(array) && array[i] == value
+	_, exists := c.arrBinarySearch(value)
+	return exists
 }
 
 // arrOptimize tries to optimize the container
