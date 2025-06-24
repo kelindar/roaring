@@ -2,82 +2,106 @@ package roaring
 
 import (
 	"io"
-	"sort"
 )
+
+// containerBlock represents a block of containers for the two-level index
+type containerBlock struct {
+	containers [256]*container // 256 slots for containers with same high 8 bits
+	count      int             // Number of non-nil containers in this block
+}
 
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	containers []*container
-	lastIdx    int
-	lastKey    uint16
+	index     [256]*containerBlock // Level 1: index by high 8 bits of container key
+	lastBlock *containerBlock      // Cache for the last accessed block
+	lastHi8   uint8                // High 8 bits of last accessed key
 }
 
 // New creates a new empty roaring bitmap
 func New() *Bitmap {
-	return &Bitmap{
-		containers: make([]*container, 0, 8), // start small, grow as needed
-		lastIdx:    -1,                       // invalid index initially
-	}
+	return &Bitmap{}
 }
 
-// findContainer finds the container for the given high bits using binary search
-// Returns (index, found) where index is either the found position or insertion point
-func (rb *Bitmap) findContainer(hi uint16) (int, bool) {
-	if rb.lastIdx >= 0 && rb.lastIdx < len(rb.containers) && rb.containers[rb.lastIdx].Key == hi {
-		return rb.lastIdx, true
+// findContainer finds the container for the given high bits using two-level index
+// Returns (container, found) where container is nil if not found
+func (rb *Bitmap) findContainer(hi uint16) (*container, bool) {
+	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
+
+	// Check cache first
+	if rb.lastBlock != nil && rb.lastHi8 == hi8 {
+		if c := rb.lastBlock.containers[lo8]; c != nil {
+			return c, true
+		}
+		return nil, false
 	}
 
-	// Binary search for the container
-	idx := sort.Search(len(rb.containers), func(i int) bool {
-		return rb.containers[i].Key >= hi
-	})
-
-	found := idx < len(rb.containers) && rb.containers[idx].Key == hi
-	if found {
-		rb.lastIdx = idx
-		rb.lastKey = hi
+	// Look up in two-level index
+	block := rb.index[hi8]
+	if block == nil {
+		return nil, false
 	}
-	return idx, found
+
+	// Cache the block
+	rb.lastBlock = block
+	rb.lastHi8 = hi8
+
+	if c := block.containers[lo8]; c != nil {
+		return c, true
+	}
+	return nil, false
 }
 
 // getContainer returns the container for the given high bits
 func (rb *Bitmap) getContainer(hi uint16) (*container, bool) {
-	idx, found := rb.findContainer(hi)
-	if found {
-		return rb.containers[idx], true
-	}
-	return nil, false
+	return rb.findContainer(hi)
 }
 
 // setContainer sets a container at the given high bits
 func (rb *Bitmap) setContainer(hi uint16, c *container) {
 	c.Key = hi // Set the key in the container
-	idx, found := rb.findContainer(hi)
-	if found {
-		// Replace existing container
-		rb.containers[idx] = c
-		rb.lastIdx = idx
-		rb.lastKey = hi
-	} else {
-		// Insert new container at the correct position
-		rb.containers = append(rb.containers, nil)
-		copy(rb.containers[idx+1:], rb.containers[idx:])
-		rb.containers[idx] = c
-		rb.lastIdx = idx
-		rb.lastKey = hi
+	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
+
+	// Get or create the block
+	block := rb.index[hi8]
+	if block == nil {
+		block = &containerBlock{}
+		rb.index[hi8] = block
+		rb.lastBlock = block
+		rb.lastHi8 = hi8
 	}
+
+	// Set the container in the block
+	if block.containers[lo8] == nil {
+		block.count++
+	}
+	block.containers[lo8] = c
+
+	// Update cache
+	rb.lastBlock = block
+	rb.lastHi8 = hi8
 }
 
 // removeContainer removes the container at the given high bits
 func (rb *Bitmap) removeContainer(hi uint16) {
-	idx, found := rb.findContainer(hi)
-	if found {
-		// Remove container by shifting slice
-		copy(rb.containers[idx:], rb.containers[idx+1:])
-		rb.containers = rb.containers[:len(rb.containers)-1]
+	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
 
-		// Invalidate cache
-		rb.lastIdx = -1
+	block := rb.index[hi8]
+	if block == nil {
+		return
+	}
+
+	if block.containers[lo8] != nil {
+		block.containers[lo8] = nil
+		block.count--
+
+		// If block is empty, remove it
+		if block.count == 0 {
+			rb.index[hi8] = nil
+			// Invalidate cache if it points to this block
+			if rb.lastBlock == block {
+				rb.lastBlock = nil
+			}
+		}
 	}
 }
 
@@ -124,23 +148,50 @@ func (rb *Bitmap) Contains(x uint32) bool {
 // Count returns the total number of bits set to 1 in the bitmap
 func (rb *Bitmap) Count() int {
 	count := 0
-	for i := range rb.containers {
-		count += rb.containers[i].cardinality()
+	for _, block := range rb.index {
+		if block != nil {
+			for _, c := range block.containers {
+				if c != nil {
+					count += c.cardinality()
+				}
+			}
+		}
 	}
 	return count
 }
 
 // Clear clears the bitmap and resizes it to zero.
 func (rb *Bitmap) Clear() {
-	rb.containers = rb.containers[:0] // reuse underlying array
-	rb.lastIdx = -1
+	rb.index = [256]*containerBlock{} // Clear all blocks
+	rb.lastBlock = nil
 }
 
 // Optimize optimizes all containers to use the most efficient representation.
 // This can significantly reduce memory usage, especially after bulk operations.
 func (rb *Bitmap) Optimize() {
-	for i := range rb.containers {
-		rb.containers[i].optimize()
+	for _, block := range rb.index {
+		if block != nil {
+			for _, c := range block.containers {
+				if c != nil {
+					c.optimize()
+				}
+			}
+		}
+	}
+}
+
+// iterateContainers calls fn for each container in key order
+func (rb *Bitmap) iterateContainers(fn func(*container)) {
+	for hi8 := 0; hi8 < 256; hi8++ {
+		block := rb.index[hi8]
+		if block == nil {
+			continue
+		}
+		for lo8 := 0; lo8 < 256; lo8++ {
+			if c := block.containers[lo8]; c != nil {
+				fn(c)
+			}
+		}
 	}
 }
 
