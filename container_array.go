@@ -18,43 +18,44 @@ func (c *container) arr() []uint16 {
 func (c *container) arrSet(value uint16) bool {
 	array := c.arr()
 
-	// Check if value already exists and find insertion point
-	for i, v := range array {
-		if v == value {
-			return false // Already exists
-		}
-		if v > value {
-			// Insert at position i
-			c.Data = append(c.Data, 0, 0) // Add space for new uint16
-			newArray := c.arr()
-			copy(newArray[i+1:], newArray[i:])
-			newArray[i] = value
-			c.Size++ // Increment cardinality
-			return true
-		}
+	// Use binary search to find insertion point
+	idx := sort.Search(len(array), func(i int) bool {
+		return array[i] >= value
+	})
+
+	// Check if value already exists
+	if idx < len(array) && array[idx] == value {
+		return false // Already exists
 	}
 
-	// Append at end
+	// Insert at position idx
 	c.Data = append(c.Data, 0, 0) // Add space for new uint16
 	newArray := c.arr()
-	newArray[len(newArray)-1] = value
-	c.Size++ // Increment cardinality
+	copy(newArray[idx+1:], newArray[idx:len(newArray)-1])
+	newArray[idx] = value
+	c.Size++
 	return true
 }
 
 // arrDel removes a value from an array container
 func (c *container) arrDel(value uint16) bool {
 	array := c.arr()
-	for i, v := range array {
-		if v == value {
-			// Remove element at index i
-			copy(array[i:], array[i+1:])
-			c.Data = c.Data[:len(c.Data)-2] // Shrink by one uint16
-			c.Size--                        // Decrement cardinality
-			return true
-		}
+
+	// Use binary search to find the value
+	idx := sort.Search(len(array), func(i int) bool {
+		return array[i] >= value
+	})
+
+	// Check if value exists
+	if idx >= len(array) || array[idx] != value {
+		return false
 	}
-	return false
+
+	// Remove element at index idx
+	copy(array[idx:], array[idx+1:])
+	c.Data = c.Data[:len(c.Data)-2] // Shrink by one uint16
+	c.Size--                        // Decrement cardinality
+	return true
 }
 
 // arrHas checks if a value exists in an array container
