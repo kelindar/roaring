@@ -20,13 +20,12 @@ func (c *container) arrFind(value uint16) (int, bool) {
 	n := len(array)
 
 	// Quick bounds check for early exit
-	if n == 0 {
+	switch {
+	case n == 0:
 		return 0, false
-	}
-	if value < array[0] {
+	case value < array[0]:
 		return 0, false
-	}
-	if value > array[n-1] {
+	case value > array[n-1]:
 		return n, false
 	}
 
@@ -34,10 +33,13 @@ func (c *container) arrFind(value uint16) (int, bool) {
 	left, right := 0, n
 	for left < right {
 		mid := left + (right-left)/2 // avoid overflow
-		if array[mid] < value {
+		switch {
+		case array[mid] < value:
 			left = mid + 1
-		} else {
+		case array[mid] > value:
 			right = mid
+		default:
+			return mid, true
 		}
 	}
 
