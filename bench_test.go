@@ -5,71 +5,83 @@ import (
 	"math/rand/v2"
 	"testing"
 	"time"
+
+	"github.com/RoaringBitmap/roaring"
 )
 
 func BenchmarkOps(b *testing.B) {
 	benchAll(b, "set", func(rb *Bitmap, v uint32) {
 		rb.Set(v)
-	}, empty(), full())
+	}, func(rb *roaring.Bitmap, v uint32) {
+		rb.Add(v)
+	})
 	benchAll(b, "has", func(rb *Bitmap, v uint32) {
 		rb.Contains(v)
-	}, empty(), full())
+	}, func(rb *roaring.Bitmap, v uint32) {
+		rb.Contains(v)
+	})
 	benchAll(b, "del", func(rb *Bitmap, v uint32) {
 		rb.Remove(v)
-	}, empty(), full())
+	}, func(rb *roaring.Bitmap, v uint32) {
+		rb.Remove(v)
+	})
 }
 
 // ---------------------------------------- Benchmarking ----------------------------------------
 
-func benchAll(b *testing.B, name string, fn func(rb *Bitmap, v uint32), states ...fnState) {
+func benchAll(b *testing.B, name string, fn func(rb *Bitmap, v uint32), fnRef func(rb *roaring.Bitmap, v uint32)) {
 	for _, size := range []int{1000, 1000000} {
 		for _, shape := range []fnShape{dataSeq(size, 0), dataRand(size, uint32(size)), dataSparse(size), dataDense(size)} {
-			for _, state := range states {
-				bench(b, fmt.Sprintf("%s-%d", name, size), shape, state, fn)
-			}
+			bench(b, fmt.Sprintf("%s-%d", name, size), shape, fn, fnRef)
 		}
 	}
 }
 
 // bench runs a benchmark for a given generator and function
-func bench(b *testing.B, name string, gen fnShape, setup fnState, fn func(rb *Bitmap, v uint32)) {
+func bench(b *testing.B, name string, gen fnShape, fnOur func(rb *Bitmap, v uint32), fnRef func(rb *roaring.Bitmap, v uint32)) {
 	data, shape := gen()
-	bitmap, state := setup(data)
-	b.Run(fmt.Sprintf("%s-%s-%s", name, shape, state), func(b *testing.B) {
+	our, ref := random(data)
+	b.Run(fmt.Sprintf("%s-%s", name, shape), func(b *testing.B) {
+		f0 := loopFor(time.Second, data, func(v uint32) {
+			fnRef(ref, v)
+		})
+
 		b.ResetTimer()
 		b.ReportAllocs()
+		f1 := loopFor(time.Second, data, func(v uint32) {
+			fnOur(our, v)
+		})
 
-		start := time.Now()
-		count := 0
-		for i := 0; i < b.N; i++ {
-			for _, v := range data {
-				fn(bitmap, v)
-				count++
-			}
-		}
-
-		b.ReportMetric(float64(count/1e6)/time.Since(start).Seconds(), "M/s")
+		b.ReportMetric(1e9/f1, "ns/op")
+		b.ReportMetric(f1/1e6, "M/s") // Througput
+		b.ReportMetric(f1/f0, "x")    // Speedup
 	})
+}
+
+func loopFor(interval time.Duration, data []uint32, fn func(v uint32)) float64 {
+	start, ops := time.Now(), float64(0)
+	for time.Since(start) < interval {
+		for _, v := range data {
+			fn(v)
+			ops++
+		}
+	}
+	return float64(ops) / time.Since(start).Seconds()
 }
 
 // ---------------------------------------- Generators ----------------------------------------
 
-type fnState = func(data []uint32) (*Bitmap, string)
-
-func empty() fnState {
-	return func(data []uint32) (*Bitmap, string) {
-		return New(), "new"
-	}
-}
-
-func full() func(data []uint32) (*Bitmap, string) {
-	return func(data []uint32) (*Bitmap, string) {
-		rb := New()
-		for _, v := range data {
-			rb.Set(v)
+// random creates a bitmap with 50% of the values set
+func random(data []uint32) (*Bitmap, *roaring.Bitmap) {
+	out := New()
+	ref := roaring.NewBitmap()
+	for _, v := range data {
+		if rand.IntN(2) == 0 {
+			out.Set(v)
+			ref.Add(v)
 		}
-		return rb, "ful"
 	}
+	return out, ref
 }
 
 type fnShape = func() ([]uint32, string)
