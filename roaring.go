@@ -37,11 +37,6 @@ func (rb *Bitmap) findContainer(hi uint16) (*container, bool) {
 	return nil, false
 }
 
-// getContainer returns the container for the given high bits
-func (rb *Bitmap) getContainer(hi uint16) (*container, bool) {
-	return rb.findContainer(hi)
-}
-
 // setContainer sets a container at the given high bits
 func (rb *Bitmap) setContainer(hi uint16, c *container) {
 	c.Key = hi // Set the key in the container
@@ -84,7 +79,7 @@ func (rb *Bitmap) removeContainer(hi uint16) {
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.getContainer(hi)
+	c, exists := rb.findContainer(hi)
 	if !exists {
 		c = &container{
 			Type: typeArray,
@@ -100,7 +95,7 @@ func (rb *Bitmap) Set(x uint32) {
 // Remove removes the bit x from the bitmap, but does not shrink it.
 func (rb *Bitmap) Remove(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.getContainer(hi)
+	c, exists := rb.findContainer(hi)
 	if !exists || !c.remove(lo) {
 		return
 	}
@@ -113,7 +108,7 @@ func (rb *Bitmap) Remove(x uint32) {
 // Contains checks whether a value is contained in the bitmap or not.
 func (rb *Bitmap) Contains(x uint32) bool {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.getContainer(hi)
+	c, exists := rb.findContainer(hi)
 	if !exists {
 		return false
 	}
