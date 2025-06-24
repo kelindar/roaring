@@ -27,8 +27,15 @@ func (c *container) bmpSet(value uint16) bool {
 
 // bmpDel removes a value from a bitmap container
 func (c *container) bmpDel(value uint16) bool {
-	if b := c.bmp(); b.Contains(uint32(value)) {
-		b.Remove(uint32(value))
+	blkAt := int(value >> 6)
+	if size := len(c.bmp()); blkAt >= size {
+		return false
+	}
+
+	bitAt := int(value % 64)
+	blk := &c.bmp()[blkAt]
+	if (*blk & (1 << bitAt)) > 0 {
+		*blk &^= (1 << bitAt)
 		c.Size--
 		return true
 	}
