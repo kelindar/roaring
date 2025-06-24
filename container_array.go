@@ -13,36 +13,40 @@ func (c *container) arr() []uint16 {
 	return unsafe.Slice((*uint16)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
 }
 
-// arrBinarySearch performs optimized binary search in array container
-// Returns the index where value should be inserted and whether it exists
-func (c *container) arrBinarySearch(value uint16) (int, bool) {
+// arrFind performs optimized binary search in array container
+// Returns (index, found) where index is the insertion point if not found
+func (c *container) arrFind(value uint16) (int, bool) {
 	array := c.arr()
-	len := len(array)
-	
+	n := len(array)
+
 	// Quick bounds check for early exit
-	if len == 0 || value < array[0] {
+	if n == 0 {
 		return 0, false
 	}
-	if value > array[len-1] {
-		return len, false
+	if value < array[0] {
+		return 0, false
 	}
-	
-	left, right := 0, len
+	if value > array[n-1] {
+		return n, false
+	}
+
+	// Optimized binary search with fewer comparisons
+	left, right := 0, n
 	for left < right {
-		mid := (left + right) / 2
+		mid := left + (right-left)/2 // avoid overflow
 		if array[mid] < value {
 			left = mid + 1
 		} else {
 			right = mid
 		}
 	}
-	
-	return left, left < len && array[left] == value
+
+	return left, left < n && array[left] == value
 }
 
 // arrSet sets a value in an array container
 func (c *container) arrSet(value uint16) bool {
-	idx, exists := c.arrBinarySearch(value)
+	idx, exists := c.arrFind(value)
 	if exists {
 		return false // Already exists
 	}
@@ -52,11 +56,12 @@ func (c *container) arrSet(value uint16) bool {
 	oldLen := len(array)
 	c.Data = append(c.Data, 0, 0) // Add space for new uint16
 	newArray := c.arr()
-	
+
 	// Move elements to the right using bulk copy
 	if idx < oldLen {
 		copy(newArray[idx+1:], array[idx:])
 	}
+
 	newArray[idx] = value
 	c.Size++
 	return true
@@ -64,7 +69,7 @@ func (c *container) arrSet(value uint16) bool {
 
 // arrDel removes a value from an array container
 func (c *container) arrDel(value uint16) bool {
-	idx, exists := c.arrBinarySearch(value)
+	idx, exists := c.arrFind(value)
 	if !exists {
 		return false
 	}
@@ -73,13 +78,13 @@ func (c *container) arrDel(value uint16) bool {
 	array := c.arr()
 	copy(array[idx:], array[idx+1:])
 	c.Data = c.Data[:len(c.Data)-2] // Shrink by one uint16
-	c.Size--                        // Decrement cardinality
+	c.Size--
 	return true
 }
 
 // arrHas checks if a value exists in an array container
 func (c *container) arrHas(value uint16) bool {
-	_, exists := c.arrBinarySearch(value)
+	_, exists := c.arrFind(value)
 	return exists
 }
 
@@ -126,10 +131,9 @@ func (c *container) arrIsDense() bool {
 }
 
 // arrToRun attempts to convert array to run in a single pass
-// Returns true if conversion was performed, false otherwise
 func (c *container) arrToRun() bool {
 	array := c.arr()
-	var runs []run
+	runs := make([]run, 0, len(array)/4) // estimate runs needed
 
 	// Single iteration: build runs AND count them
 	i0 := array[0]
@@ -150,12 +154,8 @@ func (c *container) arrToRun() bool {
 	// Add the final run
 	runs = append(runs, run{i0, i1})
 
-	// Now check conversion criteria with the actual run count
+	// Check conversion criteria with the actual run count
 	numRuns := len(runs)
-
-	// Convert to run if it would save significant space and we have few runs
-	// Array: 2 bytes per element
-	// Run: 4 bytes per run + 2 bytes header
 	sizeAsArray := len(array) * 2
 	sizeAsRun := numRuns*4 + 2
 
@@ -181,7 +181,7 @@ func (c *container) arrToBmp() {
 	c.Type = typeBitmap
 	dst := c.bmp()
 
-	// Copy all values to the bitmap
+	// Use bulk setting for better performance
 	for _, value := range src {
 		dst.Set(uint32(value))
 	}

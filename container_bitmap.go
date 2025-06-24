@@ -89,14 +89,13 @@ func (c *container) bmpIsDense() bool {
 }
 
 // bmpToRun attempts to convert bitmap to run in a single pass
-// Returns true if conversion was performed, false otherwise
 func (c *container) bmpToRun() bool {
 	bmp := c.bmp()
-	var runs []run
+	runs := make([]run, 0, 16) // estimate for initial capacity
 	var curr, last uint16
 	var inRun bool
 
-	// Single iteration: build runs AND count them
+	// Single iteration: build runs
 	bmp.Range(func(value uint32) {
 		v := uint16(value)
 		switch {
@@ -118,26 +117,18 @@ func (c *container) bmpToRun() bool {
 		runs = append(runs, run{curr, last})
 	}
 
-	// Now check conversion criteria with the actual run count
+	// Check conversion criteria with the actual run count
 	numRuns := len(runs)
 	cardinality := int(c.Size)
-
-	// Very conservative thresholds to avoid premature conversion
-	const sizeAsBitmapContainer = 8192
-
-	// Estimated size as run container (each run takes 4 bytes + 2 bytes header)
 	sizeAsRunContainer := 2 + numRuns*4
-
-	// Size as array container (2 bytes per element)
 	sizeAsArrayContainer := cardinality * 2
 
-	// Only convert if run representation is MUCH smaller and we have very few runs
+	// Only convert if run representation is much smaller and we have very few runs
 	shouldConvert := numRuns <= 5 &&
-		sizeAsRunContainer < sizeAsBitmapContainer/4 &&
+		sizeAsRunContainer < 8192/4 &&
 		sizeAsRunContainer < sizeAsArrayContainer/2
 
 	if shouldConvert {
-		// Convert using the pre-built runs (no second iteration needed!)
 		c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
 		c.Type = typeRun
 		newRuns := c.run()
@@ -152,13 +143,15 @@ func (c *container) bmpToRun() bool {
 func (c *container) bmpToArr() {
 	src := c.bmp()
 
-	// Create new array data
-	c.Data = make([]byte, src.Count()*2)
+	// Pre-allocate array data based on cardinality
+	c.Data = make([]byte, c.Size*2) // 2 bytes per uint16
 	c.Type = typeArray
 
-	// Copy all values to the array
+	// Copy all values to the array efficiently
 	dst := c.arr()
+	idx := 0
 	src.Range(func(value uint32) {
-		dst = append(dst, uint16(value))
+		dst[idx] = uint16(value)
+		idx++
 	})
 }

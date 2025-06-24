@@ -1,9 +1,9 @@
 package roaring
 
 const (
-	arrMinSize    = 2048 // Reduced from 4096 to convert to bitmap sooner for better delete performance
+	arrMinSize    = 2048
 	runMinSize    = 100
-	optimizeEvery = 2048 // calls - reduced frequency to minimize overhead
+	optimizeEvery = 2048
 )
 
 type ctype byte
