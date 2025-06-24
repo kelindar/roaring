@@ -3,6 +3,8 @@ package roaring
 import (
 	"math/rand/v2"
 	"testing"
+	
+	reference "github.com/RoaringBitmap/roaring"
 )
 
 // Benchmark data sizes for different test scenarios
@@ -584,5 +586,226 @@ func BenchmarkSingleRemove(b *testing.B) {
 	
 	for i := 0; i < b.N; i++ {
 		rb.Remove(uint32(i))
+	}
+}
+
+// COMPARISON BENCHMARKS WITH REFERENCE IMPLEMENTATION
+// These benchmarks compare this implementation with github.com/RoaringBitmap/roaring
+
+func BenchmarkComparisonSetSequentialSmall_This(b *testing.B) {
+	data := generateSequentialData(benchmarkSizeSmall, 0)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		rb := New()
+		for _, val := range data {
+			rb.Set(val)
+		}
+	}
+}
+
+func BenchmarkComparisonSetSequentialSmall_Reference(b *testing.B) {
+	data := generateSequentialData(benchmarkSizeSmall, 0)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		rb := reference.New()
+		for _, val := range data {
+			rb.Add(val)
+		}
+	}
+}
+
+func BenchmarkComparisonSetRandomMedium_This(b *testing.B) {
+	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		rb := New()
+		for _, val := range data {
+			rb.Set(val)
+		}
+	}
+}
+
+func BenchmarkComparisonSetRandomMedium_Reference(b *testing.B) {
+	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		rb := reference.New()
+		for _, val := range data {
+			rb.Add(val)
+		}
+	}
+}
+
+func BenchmarkComparisonSetSparse_This(b *testing.B) {
+	data := generateSparseData(benchmarkSizeMedium)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		rb := New()
+		for _, val := range data {
+			rb.Set(val)
+		}
+	}
+}
+
+func BenchmarkComparisonSetSparse_Reference(b *testing.B) {
+	data := generateSparseData(benchmarkSizeMedium)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		rb := reference.New()
+		for _, val := range data {
+			rb.Add(val)
+		}
+	}
+}
+
+func BenchmarkComparisonContainsSequentialMedium_This(b *testing.B) {
+	data := generateSequentialData(benchmarkSizeMedium, 0)
+	rb := New()
+	for _, val := range data {
+		rb.Set(val)
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		for _, val := range data {
+			rb.Contains(val)
+		}
+	}
+}
+
+func BenchmarkComparisonContainsSequentialMedium_Reference(b *testing.B) {
+	data := generateSequentialData(benchmarkSizeMedium, 0)
+	rb := reference.New()
+	for _, val := range data {
+		rb.Add(val)
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		for _, val := range data {
+			rb.Contains(val)
+		}
+	}
+}
+
+func BenchmarkComparisonContainsRandomMedium_This(b *testing.B) {
+	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	rb := New()
+	for _, val := range data {
+		rb.Set(val)
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		for _, val := range data {
+			rb.Contains(val)
+		}
+	}
+}
+
+func BenchmarkComparisonContainsRandomMedium_Reference(b *testing.B) {
+	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	rb := reference.New()
+	for _, val := range data {
+		rb.Add(val)
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		for _, val := range data {
+			rb.Contains(val)
+		}
+	}
+}
+
+func BenchmarkComparisonRemoveSequentialMedium_This(b *testing.B) {
+	data := generateSequentialData(benchmarkSizeMedium, 0)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rb := New()
+		for _, val := range data {
+			rb.Set(val)
+		}
+		b.StartTimer()
+		
+		for _, val := range data {
+			rb.Remove(val)
+		}
+	}
+}
+
+func BenchmarkComparisonRemoveSequentialMedium_Reference(b *testing.B) {
+	data := generateSequentialData(benchmarkSizeMedium, 0)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rb := reference.New()
+		for _, val := range data {
+			rb.Add(val)
+		}
+		b.StartTimer()
+		
+		for _, val := range data {
+			rb.Remove(val)
+		}
+	}
+}
+
+func BenchmarkComparisonRemoveRandomMedium_This(b *testing.B) {
+	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rb := New()
+		for _, val := range data {
+			rb.Set(val)
+		}
+		b.StartTimer()
+		
+		for _, val := range data {
+			rb.Remove(val)
+		}
+	}
+}
+
+func BenchmarkComparisonRemoveRandomMedium_Reference(b *testing.B) {
+	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	b.ResetTimer()
+	b.ReportAllocs()
+	
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rb := reference.New()
+		for _, val := range data {
+			rb.Add(val)
+		}
+		b.StartTimer()
+		
+		for _, val := range data {
+			rb.Remove(val)
+		}
 	}
 }

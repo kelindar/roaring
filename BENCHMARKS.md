@@ -1,6 +1,6 @@
 # Roaring Bitmap Benchmarks
 
-This repository includes comprehensive benchmarks for the core Roaring Bitmap operations: **Set**, **Remove**, and **Contains**. These benchmarks are designed to be compatible with performance comparisons against @RoaringBitmap/roaring.
+This repository includes comprehensive benchmarks for the core Roaring Bitmap operations: **Set**, **Remove**, and **Contains**. These benchmarks include direct comparisons with the reference @RoaringBitmap/roaring implementation.
 
 ## Running Benchmarks
 
@@ -26,6 +26,22 @@ go test -bench=BenchmarkRemove
 
 # Contains operations only
 go test -bench=BenchmarkContains
+```
+
+### Comparison Benchmarks
+
+Run direct comparisons with @RoaringBitmap/roaring:
+```bash
+# Run only comparison benchmarks
+go test -bench=BenchmarkComparison
+
+# Run comparison benchmarks with memory stats
+go test -bench=BenchmarkComparison -benchmem
+
+# Compare specific operations
+go test -bench=BenchmarkComparisonSet      # Set operation comparisons
+go test -bench=BenchmarkComparisonContains # Contains operation comparisons  
+go test -bench=BenchmarkComparisonRemove   # Remove operation comparisons
 ```
 
 ### Advanced Options
@@ -108,6 +124,11 @@ The benchmarks test different data patterns that affect Roaring Bitmap performan
 #### Mixed Operations
 - `BenchmarkMixedOperations*`: Combined Set/Contains/Remove operations
 
+#### Comparison Benchmarks
+- `BenchmarkComparison*_This`: This implementation's performance
+- `BenchmarkComparison*_Reference`: @RoaringBitmap/roaring reference implementation
+- Direct side-by-side comparison using identical data patterns and sizes
+
 ## Interpreting Results
 
 ### Performance Metrics
@@ -134,21 +155,31 @@ BenchmarkSetSequentialSmall-2    6812    33443 ns/op    3368 B/op    12 allocs/o
 - **Array containers** (sparse data): Good for small datasets
 - **Bitmap containers** (dense data): Consistent performance regardless of cardinality
 
-### Comparison with @RoaringBitmap/roaring
+### Direct Comparison with @RoaringBitmap/roaring
 
-To compare with the reference implementation:
+This benchmark suite includes direct performance comparisons with the reference @RoaringBitmap/roaring implementation using identical data patterns and test conditions.
 
-1. Run benchmarks and save results:
-   ```bash
-   go test -bench=. -benchmem > go_results.txt
-   ```
+**Run comparison benchmarks:**
+```bash
+# All comparison benchmarks
+go test -bench=BenchmarkComparison -benchmem
 
-2. Use similar data patterns and sizes when benchmarking the Java implementation
+# Compare and save results for analysis
+go test -bench=BenchmarkComparison -benchmem > comparison_results.txt
+```
 
-3. Compare key metrics:
-   - Operations per second (calculate from ns/op)
-   - Memory allocations per operation
-   - Memory usage patterns
+**Analyze results:**
+Look for benchmark pairs like:
+```
+BenchmarkComparisonSetSequentialSmall_This-2        5000    250000 ns/op    8000 B/op    20 allocs/op
+BenchmarkComparisonSetSequentialSmall_Reference-2   4500    280000 ns/op    9000 B/op    25 allocs/op
+```
+
+**Key comparison metrics:**
+- **Performance ratio**: Compare ns/op between implementations
+- **Memory efficiency**: Compare B/op and allocs/op
+- **Scalability**: How performance changes with data size
+- **Data pattern sensitivity**: Which patterns favor each implementation
 
 ### Expected Performance Characteristics
 
