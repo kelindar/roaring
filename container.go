@@ -103,3 +103,15 @@ func (c *container) tryOptimize() {
 		c.optimize()
 	}
 }
+
+// rangeValues calls fn for each value in the container
+func (c *container) rangeValues(fn func(uint16)) {
+	switch c.Type {
+	case typeArray:
+		c.arrRange(fn)
+	case typeBitmap:
+		c.bmpRange(fn)
+	case typeRun:
+		c.runRange(fn)
+	}
+}
