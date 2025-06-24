@@ -47,12 +47,11 @@ func benchRange(b *testing.B, name string, gen fnShape) {
 	our, ref := random(data)
 	
 	b.Run(fmt.Sprintf("%s-%s", name, shape), func(b *testing.B) {
-		// Measure reference implementation speed using ToArray
+		// Measure reference implementation speed using Iterate
 		start := time.Now()
 		refIterations := 0
 		for time.Since(start) < time.Second {
-			arr := ref.ToArray()
-			_ = arr // Consume the result
+			ref.Iterate(func(uint32) bool { return true })
 			refIterations++
 		}
 		refTime := time.Since(start)
