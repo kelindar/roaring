@@ -53,8 +53,8 @@ func bench(b *testing.B, name string, gen fnShape, fnOur func(rb *Bitmap, v uint
 		})
 
 		b.ReportMetric(1e9/f1, "ns/op")
-		b.ReportMetric(f1/1e6, "M/s") // Througput
-		b.ReportMetric(f1/f0, "x")    // Speedup
+		b.ReportMetric(f1/1e6, "M/s")  // Througput
+		b.ReportMetric(f1/f0*100, "%") // Speedup
 	})
 }
 
