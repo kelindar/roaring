@@ -36,14 +36,38 @@ func (c *container) arrBinarySearch(value uint16) (int, bool) {
 	len := len(array)
 	
 	// Quick bounds check for early exit
-	if len == 0 || value < array[0] {
+	if len == 0 {
+		return 0, false
+	}
+	if value < array[0] {
 		return 0, false
 	}
 	if value > array[len-1] {
 		return len, false
 	}
+	// Fast exact match check at boundaries
+	if value == array[0] {
+		return 0, true
+	}
+	if value == array[len-1] {
+		return len-1, true
+	}
 	
-	left, right := 0, len
+	// Optimized binary search with manual loop unrolling for small arrays
+	if len <= 32 {
+		// Linear search is faster for very small arrays
+		for i := 1; i < len-1; i++ {
+			if array[i] == value {
+				return i, true
+			}
+			if array[i] > value {
+				return i, false
+			}
+		}
+		return len-1, false
+	}
+	
+	left, right := 1, len-1
 	for left < right {
 		mid := (left + right) / 2
 		if array[mid] < value {
