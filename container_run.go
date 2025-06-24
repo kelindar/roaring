@@ -105,9 +105,10 @@ func (c *container) runInsertRunAt(index int, newRun run) {
 	runs := c.run()
 	oldLen := len(runs)
 	
-	// Reallocate data to accommodate new run
-	c.Data = make([]byte, (oldLen+1)*4)
-	newRuns := c.run()
+	// Pre-allocate with some extra capacity to reduce future reallocations 
+	newCapacity := (oldLen+1)*4 + min(oldLen*2, 64)
+	newData := make([]byte, (oldLen+1)*4, newCapacity)
+	newRuns := unsafe.Slice((*run)(unsafe.Pointer(&newData[0])), oldLen+1)
 	
 	// Copy existing runs with efficient bulk operations
 	if index > 0 {
@@ -117,6 +118,8 @@ func (c *container) runInsertRunAt(index int, newRun run) {
 	if index < oldLen {
 		copy(newRuns[index+1:], runs[index:])
 	}
+	
+	c.Data = newData
 }
 
 // runRemoveRunAt removes the run at the specified index

@@ -1,9 +1,9 @@
 package roaring
 
 const (
-	arrMinSize    = 2048 // Reduced from 4096 to convert to bitmap sooner for better delete performance
+	arrMinSize    = 1024 // Further optimized for random performance - faster conversion to bitmap
 	runMinSize    = 100
-	optimizeEvery = 2048 // calls - reduced frequency to minimize overhead
+	optimizeEvery = 4096 // calls - reduced frequency to minimize overhead during delete operations
 )
 
 type ctype byte
@@ -19,6 +19,8 @@ type container struct {
 	Call uint16 // Call count
 	Size uint32 // Cardinality
 	Data []byte // Data of the container
+	// Add a flag to track if this container is in delete-heavy mode
+	deleteHeavy bool
 }
 
 type run [2]uint16
@@ -47,15 +49,18 @@ func (c *container) remove(value uint16) (ok bool) {
 	switch c.Type {
 	case typeArray:
 		if ok = c.arrDel(value); ok {
-			c.tryOptimize()
+			c.deleteHeavy = true
+			c.tryOptimizeDelete()
 		}
 	case typeBitmap:
 		if ok = c.bmpDel(value); ok {
-			c.tryOptimize()
+			c.deleteHeavy = true
+			c.tryOptimizeDelete()
 		}
 	case typeRun:
 		if ok = c.runDel(value); ok {
-			c.tryOptimize()
+			c.deleteHeavy = true
+			c.tryOptimizeDelete()
 		}
 	}
 	return
@@ -99,6 +104,14 @@ func (c *container) optimize() {
 // tryOptimize optimizes the container periodically
 func (c *container) tryOptimize() {
 	if c.Call++; c.Call%optimizeEvery == 0 {
+		c.optimize()
+	}
+}
+
+// tryOptimizeDelete optimizes the container less frequently during delete operations
+func (c *container) tryOptimizeDelete() {
+	// Optimize much less frequently during deletes to reduce overhead
+	if c.Call++; c.Call%(optimizeEvery*2) == 0 {
 		c.optimize()
 	}
 }

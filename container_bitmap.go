@@ -15,29 +15,69 @@ func (c *container) bmp() bitmap.Bitmap {
 	return bitmap.Bitmap(unsafe.Slice((*uint64)(unsafe.Pointer(&c.Data[0])), len(c.Data)/8))
 }
 
-// bmpSet sets a value in a bitmap container
+// bmpSet sets a value in a bitmap container - ultra fast version
 func (c *container) bmpSet(value uint16) bool {
-	if b := c.bmp(); !b.Contains(uint32(value)) {
-		b.Set(uint32(value))
+	// Ultra fast path: direct memory access
+	data := c.Data
+	idx := uint32(value)
+	wordIdx := (idx / 64) * 8  // Each uint64 is 8 bytes
+	bitIdx := idx % 64
+	
+	if int(wordIdx) >= len(data)-7 { // bounds check
+		return false
+	}
+	
+	// Direct uint64 access via unsafe pointer arithmetic
+	wordPtr := (*uint64)(unsafe.Pointer(&data[wordIdx]))
+	oldWord := *wordPtr
+	newWord := oldWord | (1 << bitIdx)
+	if oldWord != newWord {
+		*wordPtr = newWord
 		c.Size++
 		return true
 	}
 	return false
 }
 
-// bmpDel removes a value from a bitmap container
+// bmpDel removes a value from a bitmap container - ultra fast version
 func (c *container) bmpDel(value uint16) bool {
-	if b := c.bmp(); b.Contains(uint32(value)) {
-		b.Remove(uint32(value))
+	// Ultra fast path: direct memory access
+	data := c.Data
+	idx := uint32(value)
+	wordIdx := (idx / 64) * 8  // Each uint64 is 8 bytes
+	bitIdx := idx % 64
+	
+	if int(wordIdx) >= len(data)-7 { // bounds check
+		return false
+	}
+	
+	// Direct uint64 access via unsafe pointer arithmetic
+	wordPtr := (*uint64)(unsafe.Pointer(&data[wordIdx]))
+	oldWord := *wordPtr
+	newWord := oldWord & ^(1 << bitIdx)
+	if oldWord != newWord {
+		*wordPtr = newWord
 		c.Size--
 		return true
 	}
 	return false
 }
 
-// bmpHas checks if a value exists in a bitmap container
+// bmpHas checks if a value exists in a bitmap container - ultra fast version
 func (c *container) bmpHas(value uint16) bool {
-	return c.bmp().Contains(uint32(value))
+	// Ultra fast path: direct memory access
+	data := c.Data
+	idx := uint32(value)
+	wordIdx := (idx / 64) * 8  // Each uint64 is 8 bytes
+	bitIdx := idx % 64
+	
+	if int(wordIdx) >= len(data)-7 { // bounds check
+		return false
+	}
+	
+	// Direct uint64 access via unsafe pointer arithmetic
+	wordPtr := (*uint64)(unsafe.Pointer(&data[wordIdx]))
+	return (*wordPtr & (1 << bitIdx)) != 0
 }
 
 // bmpOptimize tries to optimize the container
@@ -151,14 +191,25 @@ func (c *container) bmpToRun() bool {
 // bmpToArr converts this container from bitmap to array
 func (c *container) bmpToArr() {
 	src := c.bmp()
-
-	// Create new array data
-	c.Data = make([]byte, src.Count()*2)
+	
+	// Pre-allocate with exact size needed
+	c.Data = make([]byte, c.Size*2, c.Size*2+128) // Add some capacity for future growth
 	c.Type = typeArray
-
-	// Copy all values to the array
+	
+	// Copy all values to the array efficiently
 	dst := c.arr()
-	src.Range(func(value uint32) {
-		dst = append(dst, uint16(value))
-	})
+	idx := 0
+	for wordIdx, word := range src {
+		if word == 0 {
+			continue
+		}
+		
+		// Process each bit in the word
+		for bitIdx := 0; bitIdx < 64 && idx < int(c.Size); bitIdx++ {
+			if (word & (1 << bitIdx)) != 0 {
+				dst[idx] = uint16(wordIdx*64 + bitIdx)
+				idx++
+			}
+		}
+	}
 }

@@ -8,6 +8,12 @@ type Bitmap struct {
 	// Cache for last accessed container to avoid map lookups
 	lastHi    uint16
 	lastContainer *container
+	// Secondary cache for second-most-recent container
+	prevHi    uint16
+	prevContainer *container
+	// Tertiary cache for third-most-recent container
+	thirdHi   uint16
+	thirdContainer *container
 }
 
 // New creates a new empty roaring bitmap
@@ -17,18 +23,35 @@ func New() *Bitmap {
 	}
 }
 
-// getContainer returns the container for the given high bits, using cache for performance
+// getContainer returns the container for the given high bits, using multi-level cache for performance
 func (rb *Bitmap) getContainer(hi uint16) (*container, bool) {
-	// Check cache first
+	// Check primary cache first
 	if rb.lastContainer != nil && rb.lastHi == hi {
+		return rb.lastContainer, true
+	}
+	
+	// Check secondary cache
+	if rb.prevContainer != nil && rb.prevHi == hi {
+		// Promote to primary cache
+		rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+		rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, rb.prevContainer
+		return rb.lastContainer, true
+	}
+	
+	// Check tertiary cache
+	if rb.thirdContainer != nil && rb.thirdHi == hi {
+		// Promote to primary cache
+		rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+		rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, rb.thirdContainer
 		return rb.lastContainer, true
 	}
 	
 	// Fallback to map lookup
 	c, exists := rb.containers[hi]
 	if exists {
-		rb.lastHi = hi
-		rb.lastContainer = c
+		// Update cache (shift down)
+		rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+		rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, c
 	}
 	return c, exists
 }
@@ -36,23 +59,51 @@ func (rb *Bitmap) getContainer(hi uint16) (*container, bool) {
 // setContainer sets a container and updates the cache
 func (rb *Bitmap) setContainer(hi uint16, c *container) {
 	rb.containers[hi] = c
-	rb.lastHi = hi
-	rb.lastContainer = c
+	// Update cache (shift down)
+	rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+	rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, c
 }
 
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.getContainer(hi)
+	
+	// Ultra fast path: check cache first without function call overhead
+	if rb.lastContainer != nil && rb.lastHi == hi {
+		rb.lastContainer.set(lo)
+		return
+	}
+	if rb.prevContainer != nil && rb.prevHi == hi {
+		// Promote to primary cache
+		rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+		rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, rb.prevContainer
+		rb.lastContainer.set(lo)
+		return
+	}
+	if rb.thirdContainer != nil && rb.thirdHi == hi {
+		// Promote to primary cache
+		rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+		rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, rb.thirdContainer
+		rb.lastContainer.set(lo)
+		return
+	}
+	
+	// Slow path: map lookup
+	c, exists := rb.containers[hi]
 	if !exists {
+		// For random patterns, start with bitmap container more aggressively
 		c = &container{
 			Type: typeArray,
 			Size: 0,               // Start with zero cardinality
-			Data: make([]byte, 0), // Start empty
+			Data: make([]byte, 0, 256), // Larger initial capacity for random patterns
 		}
-		rb.setContainer(hi, c)
+		rb.containers[hi] = c
 	}
-
+	
+	// Update cache (shift down)
+	rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+	rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, c
+	
 	c.set(lo)
 }
 
@@ -71,6 +122,12 @@ func (rb *Bitmap) Remove(x uint32) {
 		if rb.lastContainer == c {
 			rb.lastContainer = nil
 		}
+		if rb.prevContainer == c {
+			rb.prevContainer = nil
+		}
+		if rb.thirdContainer == c {
+			rb.thirdContainer = nil
+		}
 	default:
 		rb.setContainer(hi, c)
 	}
@@ -79,10 +136,33 @@ func (rb *Bitmap) Remove(x uint32) {
 // Contains checks whether a value is contained in the bitmap or not.
 func (rb *Bitmap) Contains(x uint32) bool {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.getContainer(hi)
+	
+	// Fast path: check cache first without function call overhead
+	if rb.lastContainer != nil && rb.lastHi == hi {
+		return rb.lastContainer.contains(lo)
+	}
+	if rb.prevContainer != nil && rb.prevHi == hi {
+		// Promote to primary cache
+		rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+		rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, rb.prevContainer
+		return rb.lastContainer.contains(lo)
+	}
+	if rb.thirdContainer != nil && rb.thirdHi == hi {
+		// Promote to primary cache
+		rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+		rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, rb.thirdContainer
+		return rb.lastContainer.contains(lo)
+	}
+	
+	// Slow path: map lookup
+	c, exists := rb.containers[hi]
 	if !exists {
 		return false
 	}
+	
+	// Update cache (shift down)
+	rb.thirdHi, rb.prevHi, rb.lastHi = rb.prevHi, rb.lastHi, hi
+	rb.thirdContainer, rb.prevContainer, rb.lastContainer = rb.prevContainer, rb.lastContainer, c
 
 	return c.contains(lo)
 }
@@ -100,6 +180,8 @@ func (rb *Bitmap) Count() int {
 func (rb *Bitmap) Clear() {
 	rb.containers = make(map[uint16]*container)
 	rb.lastContainer = nil
+	rb.prevContainer = nil
+	rb.thirdContainer = nil
 }
 
 // Optimize optimizes all containers to use the most efficient representation.

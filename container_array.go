@@ -4,6 +4,22 @@ import (
 	"unsafe"
 )
 
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// max returns the maximum of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // arr converts the container to an []uint16
 func (c *container) arr() []uint16 {
 	if len(c.Data) == 0 {
@@ -50,6 +66,16 @@ func (c *container) arrSet(value uint16) bool {
 	// Insert at position idx more efficiently
 	array := c.arr()
 	oldLen := len(array)
+	
+	// Pre-allocate more space to reduce reallocations
+	if cap(c.Data) < len(c.Data)+2 {
+		// Grow by 50% or at least 64 bytes to amortize allocations
+		newCap := len(c.Data) + max(len(c.Data)/2, 64)
+		newData := make([]byte, len(c.Data), newCap)
+		copy(newData, c.Data)
+		c.Data = newData
+	}
+	
 	c.Data = append(c.Data, 0, 0) // Add space for new uint16
 	newArray := c.arr()
 	
