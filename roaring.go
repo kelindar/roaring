@@ -12,9 +12,7 @@ type cblock struct {
 
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	index   [256]*cblock // Level 1: index by high 8 bits of container key
-	laskBlk *cblock      // Cache for the last accessed block
-	lastHi8 uint8        // High 8 bits of last accessed key
+	index [256]*cblock // Level 1: index by high 8 bits of container key
 }
 
 // New creates a new empty roaring bitmap
@@ -27,23 +25,11 @@ func New() *Bitmap {
 func (rb *Bitmap) findContainer(hi uint16) (*container, bool) {
 	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
 
-	// Check cache first
-	if rb.laskBlk != nil && rb.lastHi8 == hi8 {
-		if c := rb.laskBlk.containers[lo8]; c != nil {
-			return c, true
-		}
-		return nil, false
-	}
-
 	// Look up in two-level index
 	block := rb.index[hi8]
 	if block == nil {
 		return nil, false
 	}
-
-	// Cache the block
-	rb.laskBlk = block
-	rb.lastHi8 = hi8
 
 	if c := block.containers[lo8]; c != nil {
 		return c, true
@@ -66,8 +52,6 @@ func (rb *Bitmap) setContainer(hi uint16, c *container) {
 	if block == nil {
 		block = &cblock{}
 		rb.index[hi8] = block
-		rb.laskBlk = block
-		rb.lastHi8 = hi8
 	}
 
 	// Set the container in the block
@@ -75,10 +59,6 @@ func (rb *Bitmap) setContainer(hi uint16, c *container) {
 		block.count++
 	}
 	block.containers[lo8] = c
-
-	// Update cache
-	rb.laskBlk = block
-	rb.lastHi8 = hi8
 }
 
 // removeContainer removes the container at the given high bits
@@ -97,10 +77,6 @@ func (rb *Bitmap) removeContainer(hi uint16) {
 		// If block is empty, remove it
 		if block.count == 0 {
 			rb.index[hi8] = nil
-			// Invalidate cache if it points to this block
-			if rb.laskBlk == block {
-				rb.laskBlk = nil
-			}
 		}
 	}
 }
@@ -163,7 +139,6 @@ func (rb *Bitmap) Count() int {
 // Clear clears the bitmap and resizes it to zero.
 func (rb *Bitmap) Clear() {
 	rb.index = [256]*cblock{} // Clear all blocks
-	rb.laskBlk = nil
 }
 
 // Optimize optimizes all containers to use the most efficient representation.
