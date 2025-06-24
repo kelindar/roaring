@@ -3,7 +3,7 @@ package roaring
 const (
 	arrMinSize    = 4096
 	runMinSize    = 100
-	optimizeEvery = 512 // calls
+	optimizeEvery = 2048 // calls - reduced frequency to minimize overhead
 )
 
 type ctype byte

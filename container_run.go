@@ -103,14 +103,20 @@ func (c *container) runHas(value uint16) bool {
 // runInsertRunAt inserts a new run at the specified index
 func (c *container) runInsertRunAt(index int, newRun run) {
 	runs := c.run()
-	newRuns := make([]run, len(runs)+1)
-	copy(newRuns[:index], runs[:index])
+	oldLen := len(runs)
+	
+	// Reallocate data to accommodate new run
+	c.Data = make([]byte, (oldLen+1)*4)
+	newRuns := c.run()
+	
+	// Copy existing runs with efficient bulk operations
+	if index > 0 {
+		copy(newRuns[:index], runs[:index])
+	}
 	newRuns[index] = newRun
-	copy(newRuns[index+1:], runs[index:])
-
-	c.Data = make([]byte, len(newRuns)*4)
-	c.Type = typeRun
-	copy(c.run(), newRuns)
+	if index < oldLen {
+		copy(newRuns[index+1:], runs[index:])
+	}
 }
 
 // runRemoveRunAt removes the run at the specified index
@@ -119,16 +125,23 @@ func (c *container) runRemoveRunAt(index int) {
 	if index < 0 || index >= len(runs) {
 		return
 	}
-
-	newRuns := make([]run, len(runs)-1)
-	copy(newRuns[:index], runs[:index])
-	copy(newRuns[index:], runs[index+1:])
-
-	if len(newRuns) == 0 {
+	
+	oldLen := len(runs)
+	if oldLen == 1 {
 		c.Data = nil
-	} else {
-		c.Data = make([]byte, len(newRuns)*4)
-		copy(c.run(), newRuns)
+		return
+	}
+
+	// Reallocate data for smaller run array
+	c.Data = make([]byte, (oldLen-1)*4)
+	newRuns := c.run()
+	
+	// Copy runs efficiently, skipping the removed index
+	if index > 0 {
+		copy(newRuns[:index], runs[:index])
+	}
+	if index < oldLen-1 {
+		copy(newRuns[index:], runs[index+1:])
 	}
 }
 

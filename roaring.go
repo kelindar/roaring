@@ -5,6 +5,9 @@ import "io"
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
 	containers map[uint16]*container
+	// Cache for last accessed container to avoid map lookups
+	lastHi    uint16
+	lastContainer *container
 }
 
 // New creates a new empty roaring bitmap
@@ -14,17 +17,40 @@ func New() *Bitmap {
 	}
 }
 
+// getContainer returns the container for the given high bits, using cache for performance
+func (rb *Bitmap) getContainer(hi uint16) (*container, bool) {
+	// Check cache first
+	if rb.lastContainer != nil && rb.lastHi == hi {
+		return rb.lastContainer, true
+	}
+	
+	// Fallback to map lookup
+	c, exists := rb.containers[hi]
+	if exists {
+		rb.lastHi = hi
+		rb.lastContainer = c
+	}
+	return c, exists
+}
+
+// setContainer sets a container and updates the cache
+func (rb *Bitmap) setContainer(hi uint16, c *container) {
+	rb.containers[hi] = c
+	rb.lastHi = hi
+	rb.lastContainer = c
+}
+
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.containers[hi]
+	c, exists := rb.getContainer(hi)
 	if !exists {
 		c = &container{
 			Type: typeArray,
 			Size: 0,               // Start with zero cardinality
 			Data: make([]byte, 0), // Start empty
 		}
-		rb.containers[hi] = c
+		rb.setContainer(hi, c)
 	}
 
 	c.set(lo)
@@ -33,7 +59,7 @@ func (rb *Bitmap) Set(x uint32) {
 // Remove removes the bit x from the bitmap, but does not shrink it.
 func (rb *Bitmap) Remove(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.containers[hi]
+	c, exists := rb.getContainer(hi)
 	if !exists || !c.remove(lo) {
 		return
 	}
@@ -41,15 +67,19 @@ func (rb *Bitmap) Remove(x uint32) {
 	switch {
 	case c.isEmpty():
 		delete(rb.containers, hi)
+		// Invalidate cache if we deleted the cached container
+		if rb.lastContainer == c {
+			rb.lastContainer = nil
+		}
 	default:
-		rb.containers[hi] = c
+		rb.setContainer(hi, c)
 	}
 }
 
 // Contains checks whether a value is contained in the bitmap or not.
 func (rb *Bitmap) Contains(x uint32) bool {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c, exists := rb.containers[hi]
+	c, exists := rb.getContainer(hi)
 	if !exists {
 		return false
 	}
@@ -69,6 +99,7 @@ func (rb *Bitmap) Count() int {
 // Clear clears the bitmap and resizes it to zero.
 func (rb *Bitmap) Clear() {
 	rb.containers = make(map[uint16]*container)
+	rb.lastContainer = nil
 }
 
 // Optimize optimizes all containers to use the most efficient representation.

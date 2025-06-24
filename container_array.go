@@ -28,10 +28,15 @@ func (c *container) arrSet(value uint16) bool {
 		return false // Already exists
 	}
 
-	// Insert at position idx
+	// Insert at position idx more efficiently
+	oldLen := len(array)
 	c.Data = append(c.Data, 0, 0) // Add space for new uint16
 	newArray := c.arr()
-	copy(newArray[idx+1:], newArray[idx:len(newArray)-1])
+	
+	// Move elements to the right using bulk copy
+	if idx < oldLen {
+		copy(newArray[idx+1:], array[idx:])
+	}
 	newArray[idx] = value
 	c.Size++
 	return true
