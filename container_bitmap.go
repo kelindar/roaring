@@ -43,19 +43,54 @@ func (c *container) bmpHas(value uint16) bool {
 // bmpOptimize tries to optimize the container
 func (c *container) bmpOptimize() {
 	switch {
-	case c.bmpTryConvertToRun():
+	case c.bmpIsDense():
+		c.bmpToRun()
 	case c.Size <= arrMinSize:
 		c.bmpToArr()
 	}
 }
 
-// bmpTryConvertToRun attempts to convert bitmap to run in a single pass
-// Returns true if conversion was performed, false otherwise
-func (c *container) bmpTryConvertToRun() bool {
-	if c.Size == 0 {
+// bmpIsDense quickly estimates if converting to run container would be beneficial
+func (c *container) bmpIsDense() bool {
+	if c.Size == 0 || c.Size < 50 {
 		return false
 	}
 
+	bmp := c.bmp()
+	lo, loOk := bmp.Min()
+	hi, hiOk := bmp.Max()
+	if !loOk || !hiOk {
+		return false
+	}
+
+	size := int(c.Size)
+	span := int(hi - lo + 1)
+	density := float64(size) / float64(span)
+
+	// Quick density filters
+	switch {
+	case density < 0.1: // Very sparse
+		return false
+	case density > 0.9: // Very dense
+		return true
+	}
+
+	// Estimate runs based on density
+	runs := size
+	if gap := float64(span) / float64(size); gap < 2.0 {
+		runs = int(float64(size) * (1.0 - density*0.8))
+	}
+
+	// Check if estimated conversion meets our criteria
+	sizeAsRun := runs*4 + 2
+	return runs <= 10 &&
+		sizeAsRun < 8192/4 &&
+		sizeAsRun < size
+}
+
+// bmpToRun attempts to convert bitmap to run in a single pass
+// Returns true if conversion was performed, false otherwise
+func (c *container) bmpToRun() bool {
 	bmp := c.bmp()
 	var runs []run
 	var curr, last uint16

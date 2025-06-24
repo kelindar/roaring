@@ -70,40 +70,69 @@ func (c *container) arrHas(value uint16) bool {
 // arrOptimize tries to optimize the container
 func (c *container) arrOptimize() {
 	switch {
-	case c.arrTryConvertToRun():
+	case c.arrIsDense():
+		c.arrToRun()
 	case c.Size > arrMinSize:
 		c.arrToBmp()
 	}
 }
 
-// arrTryConvertToRun attempts to convert array to run in a single pass
-// Returns true if conversion was performed, false otherwise
-func (c *container) arrTryConvertToRun() bool {
+// arrIsDense quickly estimates if converting to run container would be beneficial
+func (c *container) arrIsDense() bool {
 	array := c.arr()
 	if len(array) < 128 {
-		return false // Need at least 128 elements to form a meaningful run
+		return false
 	}
 
+	lo, hi := array[0], array[len(array)-1]
+	span := int(hi - lo + 1)
+	size := len(array)
+
+	// Quick density filters
+	density := float64(size) / float64(span)
+	switch {
+	case density < 0.1: // Very sparse
+		return false
+	case density > 0.8: // Very dense
+		return true
+	}
+
+	// Estimate number of runs using density
+	runs := size
+	if gap := float64(span) / float64(size); gap < 2.0 {
+		runs = int(float64(size) * (1.0 - density*0.7))
+	}
+
+	// Check if estimated conversion meets our criteria
+	sizeAsArr := size * 2
+	sizeAsRun := runs*4 + 2
+	return sizeAsRun < sizeAsArr*3/4 && runs <= size/3
+}
+
+// arrToRun attempts to convert array to run in a single pass
+// Returns true if conversion was performed, false otherwise
+func (c *container) arrToRun() bool {
+	array := c.arr()
 	var runs []run
 
 	// Single iteration: build runs AND count them
-	currentStart := array[0]
-	currentEnd := array[0]
+	i0 := array[0]
+	i1 := array[0]
 
 	for i := 1; i < len(array); i++ {
-		if array[i] == currentEnd+1 {
+		if array[i] == i1+1 {
 			// Continue current run
-			currentEnd = array[i]
+			i1 = array[i]
 		} else {
 			// End current run and start new one
-			runs = append(runs, run{currentStart, currentEnd})
-			currentStart = array[i]
-			currentEnd = array[i]
+			runs = append(runs, run{i0, i1})
+			i0 = array[i]
+			i1 = array[i]
 		}
 	}
 
 	// Add the final run
-	runs = append(runs, run{currentStart, currentEnd})
+	runs = append(runs, run{i0, i1})
 
 	// Now check conversion criteria with the actual run count
 	numRuns := len(runs)
