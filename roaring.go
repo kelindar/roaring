@@ -5,45 +5,37 @@ import (
 	"sort"
 )
 
-// containerPair represents a (key, container) pair in sorted order
-type containerPair struct {
-	key       uint16
-	container *container
-}
-
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	containers []containerPair // sorted by key for binary search
-	// Cache for last accessed container to avoid binary search
-	lastIdx int
-	lastHi  uint16
+	containers []*container
+	lastIdx    int
+	lastKey    uint16
 }
 
 // New creates a new empty roaring bitmap
 func New() *Bitmap {
 	return &Bitmap{
-		containers: make([]containerPair, 0, 8), // start small, grow as needed
-		lastIdx:    -1,                          // invalid index initially
+		containers: make([]*container, 0, 8), // start small, grow as needed
+		lastIdx:    -1,                       // invalid index initially
 	}
 }
 
 // findContainer finds the container for the given high bits using binary search
 // Returns (index, found) where index is either the found position or insertion point
 func (rb *Bitmap) findContainer(hi uint16) (int, bool) {
-	// Check cache first
-	if rb.lastIdx >= 0 && rb.lastIdx < len(rb.containers) && rb.containers[rb.lastIdx].key == hi {
+	if rb.lastIdx >= 0 && rb.lastIdx < len(rb.containers) && rb.containers[rb.lastIdx].Key == hi {
 		return rb.lastIdx, true
 	}
 
 	// Binary search for the container
 	idx := sort.Search(len(rb.containers), func(i int) bool {
-		return rb.containers[i].key >= hi
+		return rb.containers[i].Key >= hi
 	})
 
-	found := idx < len(rb.containers) && rb.containers[idx].key == hi
+	found := idx < len(rb.containers) && rb.containers[idx].Key == hi
 	if found {
 		rb.lastIdx = idx
-		rb.lastHi = hi
+		rb.lastKey = hi
 	}
 	return idx, found
 }
@@ -52,26 +44,27 @@ func (rb *Bitmap) findContainer(hi uint16) (int, bool) {
 func (rb *Bitmap) getContainer(hi uint16) (*container, bool) {
 	idx, found := rb.findContainer(hi)
 	if found {
-		return rb.containers[idx].container, true
+		return rb.containers[idx], true
 	}
 	return nil, false
 }
 
 // setContainer sets a container at the given high bits
 func (rb *Bitmap) setContainer(hi uint16, c *container) {
+	c.Key = hi // Set the key in the container
 	idx, found := rb.findContainer(hi)
 	if found {
 		// Replace existing container
-		rb.containers[idx].container = c
+		rb.containers[idx] = c
 		rb.lastIdx = idx
-		rb.lastHi = hi
+		rb.lastKey = hi
 	} else {
 		// Insert new container at the correct position
-		rb.containers = append(rb.containers, containerPair{})
+		rb.containers = append(rb.containers, nil)
 		copy(rb.containers[idx+1:], rb.containers[idx:])
-		rb.containers[idx] = containerPair{key: hi, container: c}
+		rb.containers[idx] = c
 		rb.lastIdx = idx
-		rb.lastHi = hi
+		rb.lastKey = hi
 	}
 }
 
@@ -132,7 +125,7 @@ func (rb *Bitmap) Contains(x uint32) bool {
 func (rb *Bitmap) Count() int {
 	count := 0
 	for i := range rb.containers {
-		count += rb.containers[i].container.cardinality()
+		count += rb.containers[i].cardinality()
 	}
 	return count
 }
@@ -147,7 +140,7 @@ func (rb *Bitmap) Clear() {
 // This can significantly reduce memory usage, especially after bulk operations.
 func (rb *Bitmap) Optimize() {
 	for i := range rb.containers {
-		rb.containers[i].container.optimize()
+		rb.containers[i].optimize()
 	}
 }
 

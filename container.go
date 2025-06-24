@@ -15,6 +15,7 @@ const (
 )
 
 type container struct {
+	Key  uint16   // High 16 bits of the value range this container handles
 	Type ctype    // Type of the container
 	Call uint16   // Call count
 	Size uint32   // Cardinality
