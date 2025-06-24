@@ -8,7 +8,7 @@ func (c *container) run() []run {
 		return nil
 	}
 
-	return unsafe.Slice((*run)(unsafe.Pointer(&c.Data[0])), len(c.Data)/4)
+	return unsafe.Slice((*run)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
 }
 
 // runFind performs binary search to find a value in the run container
@@ -104,11 +104,11 @@ func (c *container) runHas(value uint16) bool {
 func (c *container) runInsertRunAt(index int, newRun run) {
 	runs := c.run()
 	oldLen := len(runs)
-	
+
 	// Reallocate data to accommodate new run
-	c.Data = make([]byte, (oldLen+1)*4)
+	c.Data = make([]uint16, (oldLen+1)*2)
 	newRuns := c.run()
-	
+
 	// Copy existing runs with efficient bulk operations
 	if index > 0 {
 		copy(newRuns[:index], runs[:index])
@@ -125,7 +125,7 @@ func (c *container) runRemoveRunAt(index int) {
 	if index < 0 || index >= len(runs) {
 		return
 	}
-	
+
 	oldLen := len(runs)
 	if oldLen == 1 {
 		c.Data = nil
@@ -133,9 +133,9 @@ func (c *container) runRemoveRunAt(index int) {
 	}
 
 	// Reallocate data for smaller run array
-	c.Data = make([]byte, (oldLen-1)*4)
+	c.Data = make([]uint16, (oldLen-1)*2)
 	newRuns := c.run()
-	
+
 	// Copy runs efficiently, skipping the removed index
 	if index > 0 {
 		copy(newRuns[:index], runs[:index])
@@ -173,14 +173,16 @@ func (c *container) runToArray() {
 	src := c.run()
 
 	// Create new array data
-	c.Data = make([]byte, c.Size*2)
+	c.Data = make([]uint16, c.Size)
 	c.Type = typeArray
 	dst := c.arr()
 
 	// Copy all values to the array
+	idx := 0
 	for _, r := range src {
 		for value := r[0]; value <= r[1]; value++ {
-			dst = append(dst, value)
+			dst[idx] = value
+			idx++
 			if value == r[1] {
 				break // Prevent uint16 overflow when r[1] is 65535
 			}
@@ -192,8 +194,8 @@ func (c *container) runToArray() {
 func (c *container) runToBmp() {
 	src := c.run()
 
-	// Create bitmap data (65536 bits = 8192 bytes)
-	c.Data = make([]byte, 8192)
+	// Create bitmap data (65536 bits = 8192 bytes = 4096 uint16s)
+	c.Data = make([]uint16, 4096)
 	c.Type = typeBitmap
 	dst := c.bmp()
 

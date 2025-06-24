@@ -95,8 +95,8 @@ func (rb *Bitmap) Set(x uint32) {
 	if !exists {
 		c = &container{
 			Type: typeArray,
-			Size: 0,                    // Start with zero cardinality
-			Data: make([]byte, 0, 128), // Start empty with some capacity
+			Size: 0,                     // Start with zero cardinality
+			Data: make([]uint16, 0, 64), // Start empty with some capacity (64 uint16s = 128 bytes)
 		}
 		rb.setContainer(hi, c)
 	}

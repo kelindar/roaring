@@ -15,10 +15,10 @@ const (
 )
 
 type container struct {
-	Type ctype  // Type of the container
-	Call uint16 // Call count
-	Size uint32 // Cardinality
-	Data []byte // Data of the container
+	Type ctype    // Type of the container
+	Call uint16   // Call count
+	Size uint32   // Cardinality
+	Data []uint16 // Data of the container
 }
 
 type run [2]uint16

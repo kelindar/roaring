@@ -12,7 +12,7 @@ func (c *container) bmp() bitmap.Bitmap {
 		return nil
 	}
 
-	return bitmap.Bitmap(unsafe.Slice((*uint64)(unsafe.Pointer(&c.Data[0])), len(c.Data)/8))
+	return bitmap.Bitmap(unsafe.Slice((*uint64)(unsafe.Pointer(&c.Data[0])), len(c.Data)/4))
 }
 
 // bmpSet sets a value in a bitmap container
@@ -129,7 +129,7 @@ func (c *container) bmpToRun() bool {
 		sizeAsRunContainer < sizeAsArrayContainer/2
 
 	if shouldConvert {
-		c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
+		c.Data = make([]uint16, len(runs)*2) // 2 uint16s per run
 		c.Type = typeRun
 		newRuns := c.run()
 		copy(newRuns, runs)
@@ -144,7 +144,7 @@ func (c *container) bmpToArr() {
 	src := c.bmp()
 
 	// Pre-allocate array data based on cardinality
-	c.Data = make([]byte, c.Size*2) // 2 bytes per uint16
+	c.Data = make([]uint16, c.Size) // uint16 per element
 	c.Type = typeArray
 
 	// Copy all values to the array efficiently

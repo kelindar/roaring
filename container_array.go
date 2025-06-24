@@ -1,16 +1,8 @@
 package roaring
 
-import (
-	"unsafe"
-)
-
 // arr converts the container to an []uint16
 func (c *container) arr() []uint16 {
-	if len(c.Data) == 0 {
-		return nil
-	}
-
-	return unsafe.Slice((*uint16)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
+	return c.Data
 }
 
 // arrFind performs optimized binary search in array container
@@ -56,7 +48,7 @@ func (c *container) arrSet(value uint16) bool {
 	// Insert at position idx more efficiently
 	array := c.arr()
 	oldLen := len(array)
-	c.Data = append(c.Data, 0, 0) // Add space for new uint16
+	c.Data = append(c.Data, 0) // Add space for new uint16
 	newArray := c.arr()
 
 	// Move elements to the right using bulk copy
@@ -79,7 +71,7 @@ func (c *container) arrDel(value uint16) bool {
 	// Remove element at index idx
 	array := c.arr()
 	copy(array[idx:], array[idx+1:])
-	c.Data = c.Data[:len(c.Data)-2] // Shrink by one uint16
+	c.Data = c.Data[:len(c.Data)-1] // Shrink by one uint16
 	c.Size--
 	return true
 }
@@ -164,7 +156,7 @@ func (c *container) arrToRun() bool {
 	// Only convert if we save at least 25% space and have reasonable compression
 	shouldConvert := sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
 	if shouldConvert {
-		c.Data = make([]byte, len(runs)*4) // 4 bytes per run (2 uint16s)
+		c.Data = make([]uint16, len(runs)*2) // 2 uint16s per run
 		c.Type = typeRun
 		newRuns := c.run()
 		copy(newRuns, runs)
@@ -178,8 +170,8 @@ func (c *container) arrToRun() bool {
 func (c *container) arrToBmp() {
 	src := c.arr()
 
-	// Create bitmap data (65536 bits = 8192 bytes)
-	c.Data = make([]byte, 8192)
+	// Create bitmap data (65536 bits = 8192 bytes = 4096 uint16s)
+	c.Data = make([]uint16, 4096)
 	c.Type = typeBitmap
 	dst := c.bmp()
 
