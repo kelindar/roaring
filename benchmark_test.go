@@ -63,465 +63,462 @@ func generateContainerBoundaryData(size int) []uint32 {
 	return data
 }
 
-// SET OPERATION BENCHMARKS
+// Helper functions for benchmarking different operations
 
-func BenchmarkSetSequentialSmall(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeSmall, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
+// benchmarkSet runs Set operation benchmarks with the given data generator
+func benchmarkSet(b *testing.B, name string, dataGen func() []uint32) {
+	b.Run(name, func(b *testing.B) {
+		data := dataGen()
+		b.ResetTimer()
+		b.ReportAllocs()
+		
+		for i := 0; i < b.N; i++ {
+			rb := New()
+			for _, val := range data {
+				rb.Set(val)
+			}
+		}
+	})
+}
+
+// benchmarkRemove runs Remove operation benchmarks with the given data generator
+func benchmarkRemove(b *testing.B, name string, dataGen func() []uint32) {
+	b.Run(name, func(b *testing.B) {
+		data := dataGen()
+		b.ResetTimer()
+		b.ReportAllocs()
+		
+		for i := 0; i < b.N; i++ {
+			b.StopTimer()
+			rb := New()
+			// Pre-populate the bitmap
+			for _, val := range data {
+				rb.Set(val)
+			}
+			b.StartTimer()
+			
+			// Remove all values
+			for _, val := range data {
+				rb.Remove(val)
+			}
+		}
+	})
+}
+
+// benchmarkContains runs Contains operation benchmarks with the given data generator
+func benchmarkContains(b *testing.B, name string, dataGen func() []uint32) {
+	b.Run(name, func(b *testing.B) {
+		data := dataGen()
 		rb := New()
 		for _, val := range data {
 			rb.Set(val)
 		}
-	}
+		b.ResetTimer()
+		b.ReportAllocs()
+		
+		for i := 0; i < b.N; i++ {
+			for _, val := range data {
+				rb.Contains(val)
+			}
+		}
+	})
+}
+
+// benchmarkMixed runs mixed operation benchmarks with the given data generator
+func benchmarkMixed(b *testing.B, name string, dataGen func() []uint32) {
+	b.Run(name, func(b *testing.B) {
+		data := dataGen()
+		b.ResetTimer()
+		b.ReportAllocs()
+		
+		for i := 0; i < b.N; i++ {
+			rb := New()
+			
+			// Set all values
+			for _, val := range data {
+				rb.Set(val)
+			}
+			
+			// Check all values
+			for _, val := range data {
+				rb.Contains(val)
+			}
+			
+			// Remove half the values
+			for i, val := range data {
+				if i%2 == 0 {
+					rb.Remove(val)
+				}
+			}
+		}
+	})
+}
+
+// benchmarkComparison runs comparison benchmarks between this implementation and reference
+func benchmarkComparison(b *testing.B, name string, dataGen func() []uint32, operation string) {
+	data := dataGen()
+	
+	// This implementation
+	b.Run(name+"_This", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+		
+		switch operation {
+		case "Set":
+			for i := 0; i < b.N; i++ {
+				rb := New()
+				for _, val := range data {
+					rb.Set(val)
+				}
+			}
+		case "Contains":
+			rb := New()
+			for _, val := range data {
+				rb.Set(val)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, val := range data {
+					rb.Contains(val)
+				}
+			}
+		case "Remove":
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				rb := New()
+				for _, val := range data {
+					rb.Set(val)
+				}
+				b.StartTimer()
+				for _, val := range data {
+					rb.Remove(val)
+				}
+			}
+		}
+	})
+	
+	// Reference implementation
+	b.Run(name+"_Reference", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+		
+		switch operation {
+		case "Set":
+			for i := 0; i < b.N; i++ {
+				rb := reference.New()
+				for _, val := range data {
+					rb.Add(val)
+				}
+			}
+		case "Contains":
+			rb := reference.New()
+			for _, val := range data {
+				rb.Add(val)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, val := range data {
+					rb.Contains(val)
+				}
+			}
+		case "Remove":
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				rb := reference.New()
+				for _, val := range data {
+					rb.Add(val)
+				}
+				b.StartTimer()
+				for _, val := range data {
+					rb.Remove(val)
+				}
+			}
+		}
+	})
+}
+
+// SET OPERATION BENCHMARKS
+
+func BenchmarkSet(b *testing.B) {
+	// Sequential benchmarks
+	benchmarkSet(b, "SequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	})
+	benchmarkSet(b, "SequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
+	benchmarkSet(b, "SequentialLarge", func() []uint32 {
+		return generateSequentialData(benchmarkSizeLarge, 0)
+	})
+	
+	// Random benchmarks
+	benchmarkSet(b, "RandomSmall", func() []uint32 {
+		return generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
+	})
+	benchmarkSet(b, "RandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
+	benchmarkSet(b, "RandomLarge", func() []uint32 {
+		return generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
+	})
+	
+	// Special pattern benchmarks
+	benchmarkSet(b, "Sparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	})
+	benchmarkSet(b, "Dense", func() []uint32 {
+		return generateDenseData(benchmarkSizeMedium)
+	})
+	benchmarkSet(b, "ContainerBoundary", func() []uint32 {
+		return generateContainerBoundaryData(benchmarkSizeMedium)
+	})
+}
+
+// Individual benchmarks for backward compatibility
+func BenchmarkSetSequentialSmall(b *testing.B) {
+	benchmarkSet(b, "SequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	})
 }
 
 func BenchmarkSetSequentialMedium(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "SequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
 }
 
 func BenchmarkSetSequentialLarge(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeLarge, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "SequentialLarge", func() []uint32 {
+		return generateSequentialData(benchmarkSizeLarge, 0)
+	})
 }
 
 func BenchmarkSetRandomSmall(b *testing.B) {
-	data := generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "RandomSmall", func() []uint32 {
+		return generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
+	})
 }
 
 func BenchmarkSetRandomMedium(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "RandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
 }
 
 func BenchmarkSetRandomLarge(b *testing.B) {
-	data := generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "RandomLarge", func() []uint32 {
+		return generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
+	})
 }
 
 func BenchmarkSetSparse(b *testing.B) {
-	data := generateSparseData(benchmarkSizeMedium)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "Sparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	})
 }
 
 func BenchmarkSetDense(b *testing.B) {
-	data := generateDenseData(benchmarkSizeMedium)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "Dense", func() []uint32 {
+		return generateDenseData(benchmarkSizeMedium)
+	})
 }
 
 func BenchmarkSetContainerBoundary(b *testing.B) {
-	data := generateContainerBoundaryData(benchmarkSizeMedium)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkSet(b, "ContainerBoundary", func() []uint32 {
+		return generateContainerBoundaryData(benchmarkSizeMedium)
+	})
 }
 
 // REMOVE OPERATION BENCHMARKS
 
-func BenchmarkRemoveSequentialSmall(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeSmall, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
+func BenchmarkRemove(b *testing.B) {
+	// Sequential benchmarks
+	benchmarkRemove(b, "SequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	})
+	benchmarkRemove(b, "SequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
+	benchmarkRemove(b, "SequentialLarge", func() []uint32 {
+		return generateSequentialData(benchmarkSizeLarge, 0)
+	})
 	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		// Pre-populate the bitmap
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		// Remove all values
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	// Random benchmarks
+	benchmarkRemove(b, "RandomSmall", func() []uint32 {
+		return generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
+	})
+	benchmarkRemove(b, "RandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
+	benchmarkRemove(b, "RandomLarge", func() []uint32 {
+		return generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
+	})
+	
+	// Special pattern benchmarks
+	benchmarkRemove(b, "Sparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	})
+	benchmarkRemove(b, "Dense", func() []uint32 {
+		return generateDenseData(benchmarkSizeMedium)
+	})
+}
+
+// Individual benchmarks for backward compatibility
+func BenchmarkRemoveSequentialSmall(b *testing.B) {
+	benchmarkRemove(b, "SequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	})
 }
 
 func BenchmarkRemoveSequentialMedium(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkRemove(b, "SequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
 }
 
 func BenchmarkRemoveSequentialLarge(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeLarge, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkRemove(b, "SequentialLarge", func() []uint32 {
+		return generateSequentialData(benchmarkSizeLarge, 0)
+	})
 }
 
 func BenchmarkRemoveRandomSmall(b *testing.B) {
-	data := generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkRemove(b, "RandomSmall", func() []uint32 {
+		return generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
+	})
 }
 
 func BenchmarkRemoveRandomMedium(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkRemove(b, "RandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
 }
 
 func BenchmarkRemoveRandomLarge(b *testing.B) {
-	data := generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkRemove(b, "RandomLarge", func() []uint32 {
+		return generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
+	})
 }
 
 func BenchmarkRemoveSparse(b *testing.B) {
-	data := generateSparseData(benchmarkSizeMedium)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkRemove(b, "Sparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	})
 }
 
 func BenchmarkRemoveDense(b *testing.B) {
-	data := generateDenseData(benchmarkSizeMedium)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkRemove(b, "Dense", func() []uint32 {
+		return generateDenseData(benchmarkSizeMedium)
+	})
 }
 
 // CONTAINS OPERATION BENCHMARKS
 
-func BenchmarkContainsSequentialSmall(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeSmall, 0)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
+func BenchmarkContains(b *testing.B) {
+	// Sequential benchmarks
+	benchmarkContains(b, "SequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	})
+	benchmarkContains(b, "SequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
+	benchmarkContains(b, "SequentialLarge", func() []uint32 {
+		return generateSequentialData(benchmarkSizeLarge, 0)
+	})
 	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	// Random benchmarks
+	benchmarkContains(b, "RandomSmall", func() []uint32 {
+		return generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
+	})
+	benchmarkContains(b, "RandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
+	benchmarkContains(b, "RandomLarge", func() []uint32 {
+		return generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
+	})
+	
+	// Special pattern benchmarks
+	benchmarkContains(b, "Sparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	})
+	benchmarkContains(b, "Dense", func() []uint32 {
+		return generateDenseData(benchmarkSizeMedium)
+	})
+}
+
+// Individual benchmarks for backward compatibility
+func BenchmarkContainsSequentialSmall(b *testing.B) {
+	benchmarkContains(b, "SequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	})
 }
 
 func BenchmarkContainsSequentialMedium(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkContains(b, "SequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
 }
 
 func BenchmarkContainsSequentialLarge(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeLarge, 0)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkContains(b, "SequentialLarge", func() []uint32 {
+		return generateSequentialData(benchmarkSizeLarge, 0)
+	})
 }
 
 func BenchmarkContainsRandomSmall(b *testing.B) {
-	data := generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkContains(b, "RandomSmall", func() []uint32 {
+		return generateRandomData(benchmarkSizeSmall, benchmarkSizeSmall*10)
+	})
 }
 
 func BenchmarkContainsRandomMedium(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkContains(b, "RandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
 }
 
 func BenchmarkContainsRandomLarge(b *testing.B) {
-	data := generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkContains(b, "RandomLarge", func() []uint32 {
+		return generateRandomData(benchmarkSizeLarge, benchmarkSizeLarge*10)
+	})
 }
 
 func BenchmarkContainsSparse(b *testing.B) {
-	data := generateSparseData(benchmarkSizeMedium)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkContains(b, "Sparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	})
 }
 
 func BenchmarkContainsDense(b *testing.B) {
-	data := generateDenseData(benchmarkSizeMedium)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkContains(b, "Dense", func() []uint32 {
+		return generateDenseData(benchmarkSizeMedium)
+	})
 }
 
 // MIXED OPERATION BENCHMARKS
 
+func BenchmarkMixedOperations(b *testing.B) {
+	benchmarkMixed(b, "Sequential", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
+	benchmarkMixed(b, "Random", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
+}
+
+// Individual benchmarks for backward compatibility
 func BenchmarkMixedOperationsSequential(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		
-		// Set all values
-		for _, val := range data {
-			rb.Set(val)
-		}
-		
-		// Check all values
-		for _, val := range data {
-			rb.Contains(val)
-		}
-		
-		// Remove half the values
-		for i, val := range data {
-			if i%2 == 0 {
-				rb.Remove(val)
-			}
-		}
-	}
+	benchmarkMixed(b, "Sequential", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	})
 }
 
 func BenchmarkMixedOperationsRandom(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		
-		// Set all values
-		for _, val := range data {
-			rb.Set(val)
-		}
-		
-		// Check all values
-		for _, val := range data {
-			rb.Contains(val)
-		}
-		
-		// Remove half the values
-		for i, val := range data {
-			if i%2 == 0 {
-				rb.Remove(val)
-			}
-		}
-	}
+	benchmarkMixed(b, "Random", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	})
 }
 
 // SINGLE OPERATION BENCHMARKS (for measuring per-operation performance)
@@ -592,220 +589,103 @@ func BenchmarkSingleRemove(b *testing.B) {
 // COMPARISON BENCHMARKS WITH REFERENCE IMPLEMENTATION
 // These benchmarks compare this implementation with github.com/RoaringBitmap/roaring
 
-func BenchmarkComparisonSetSequentialSmall_This(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeSmall, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
+func BenchmarkComparison(b *testing.B) {
+	// Set operation comparisons
+	benchmarkComparison(b, "SetSequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	}, "Set")
+	benchmarkComparison(b, "SetRandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	}, "Set")
+	benchmarkComparison(b, "SetSparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	}, "Set")
 	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	// Contains operation comparisons
+	benchmarkComparison(b, "ContainsSequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	}, "Contains")
+	benchmarkComparison(b, "ContainsRandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	}, "Contains")
+	
+	// Remove operation comparisons
+	benchmarkComparison(b, "RemoveSequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	}, "Remove")
+	benchmarkComparison(b, "RemoveRandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	}, "Remove")
+}
+
+// Individual comparison benchmarks for backward compatibility
+func BenchmarkComparisonSetSequentialSmall_This(b *testing.B) {
+	benchmarkComparison(b, "SetSequentialSmall", func() []uint32 {
+		return generateSequentialData(benchmarkSizeSmall, 0)
+	}, "Set")
 }
 
 func BenchmarkComparisonSetSequentialSmall_Reference(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeSmall, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := reference.New()
-		for _, val := range data {
-			rb.Add(val)
-		}
-	}
+	// This will be handled by the benchmarkComparison function
+	b.Skip("Use BenchmarkComparison instead")
 }
 
 func BenchmarkComparisonSetRandomMedium_This(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkComparison(b, "SetRandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	}, "Set")
 }
 
 func BenchmarkComparisonSetRandomMedium_Reference(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := reference.New()
-		for _, val := range data {
-			rb.Add(val)
-		}
-	}
+	b.Skip("Use BenchmarkComparison instead")
 }
 
 func BenchmarkComparisonSetSparse_This(b *testing.B) {
-	data := generateSparseData(benchmarkSizeMedium)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-	}
+	benchmarkComparison(b, "SetSparse", func() []uint32 {
+		return generateSparseData(benchmarkSizeMedium)
+	}, "Set")
 }
 
 func BenchmarkComparisonSetSparse_Reference(b *testing.B) {
-	data := generateSparseData(benchmarkSizeMedium)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		rb := reference.New()
-		for _, val := range data {
-			rb.Add(val)
-		}
-	}
+	b.Skip("Use BenchmarkComparison instead")
 }
 
 func BenchmarkComparisonContainsSequentialMedium_This(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkComparison(b, "ContainsSequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	}, "Contains")
 }
 
 func BenchmarkComparisonContainsSequentialMedium_Reference(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	rb := reference.New()
-	for _, val := range data {
-		rb.Add(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	b.Skip("Use BenchmarkComparison instead")
 }
 
 func BenchmarkComparisonContainsRandomMedium_This(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	rb := New()
-	for _, val := range data {
-		rb.Set(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	benchmarkComparison(b, "ContainsRandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	}, "Contains")
 }
 
 func BenchmarkComparisonContainsRandomMedium_Reference(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	rb := reference.New()
-	for _, val := range data {
-		rb.Add(val)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		for _, val := range data {
-			rb.Contains(val)
-		}
-	}
+	b.Skip("Use BenchmarkComparison instead")
 }
 
 func BenchmarkComparisonRemoveSequentialMedium_This(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkComparison(b, "RemoveSequentialMedium", func() []uint32 {
+		return generateSequentialData(benchmarkSizeMedium, 0)
+	}, "Remove")
 }
 
 func BenchmarkComparisonRemoveSequentialMedium_Reference(b *testing.B) {
-	data := generateSequentialData(benchmarkSizeMedium, 0)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := reference.New()
-		for _, val := range data {
-			rb.Add(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	b.Skip("Use BenchmarkComparison instead")
 }
 
 func BenchmarkComparisonRemoveRandomMedium_This(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := New()
-		for _, val := range data {
-			rb.Set(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	benchmarkComparison(b, "RemoveRandomMedium", func() []uint32 {
+		return generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
+	}, "Remove")
 }
 
 func BenchmarkComparisonRemoveRandomMedium_Reference(b *testing.B) {
-	data := generateRandomData(benchmarkSizeMedium, benchmarkSizeMedium*10)
-	b.ResetTimer()
-	b.ReportAllocs()
-	
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		rb := reference.New()
-		for _, val := range data {
-			rb.Add(val)
-		}
-		b.StartTimer()
-		
-		for _, val := range data {
-			rb.Remove(val)
-		}
-	}
+	b.Skip("Use BenchmarkComparison instead")
 }
