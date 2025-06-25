@@ -43,6 +43,20 @@ func BenchmarkAnd(b *testing.B) {
 	}
 }
 
+func BenchmarkClone(b *testing.B) {
+	data, _ := dataRand(1e6, 1e6)()
+	rb, _ := random(data)
+	rb.Optimize()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		clone := rb.Clone(nil)
+		_ = clone
+	}
+}
+
 // ---------------------------------------- Benchmarking ----------------------------------------
 
 // benchRange runs a benchmark for the Range operation

@@ -183,7 +183,7 @@ func (rb *Bitmap) Grow(desiredBit uint32) {
 	panic("not implemented")
 }
 
-// Clone clones the bitmap
+// Clone clones the bitmap using copy-on-write for better performance
 func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	if into == nil {
 		into = &Bitmap{}
@@ -198,7 +198,7 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 		return into
 	}
 
-	// Copy blocks and containers efficiently
+	// Copy blocks and containers with COW sharing
 	for i := int(rb.span[0]); i <= int(rb.span[1]); i++ {
 		block := rb.blocks[i]
 		if block == nil {
@@ -209,23 +209,12 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 		newBlock := &cblock{cindex: block.cindex}
 		into.blocks[i] = newBlock
 
-		// Copy containers efficiently
+		// Use COW cloning for containers - much faster than deep copying
 		for j := int(block.span[0]); j <= int(block.span[1]); j++ {
 			c := block.content[j]
-			if c == nil {
-				continue
+			if c != nil {
+				newBlock.content[j] = c.cowClone()
 			}
-
-			// Clone container with pre-allocated slice to reduce allocations
-			newContainer := &container{
-				Key:  c.Key,
-				Type: c.Type,
-				Call: c.Call,
-				Size: c.Size,
-				Data: make([]uint16, len(c.Data)), // Exact capacity
-			}
-			copy(newContainer.Data, c.Data)
-			newBlock.content[j] = newContainer
 		}
 	}
 

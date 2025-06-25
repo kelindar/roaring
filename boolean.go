@@ -157,6 +157,9 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 
 // andContainers performs efficient AND between two containers
 func (rb *Bitmap) andContainers(c1, c2 *container) bool {
+	// Ensure we own c1's data before modifying it (COW protection)
+	c1.cowEnsureOwned()
+
 	// Use most efficient algorithm based on container types
 	switch {
 	case c1.Type == typeArray && c2.Type == typeArray:
@@ -436,6 +439,9 @@ func (rb *Bitmap) bitmapToArray(c *container) {
 	if c.Type != typeBitmap || c.Size > arrMinSize {
 		return
 	}
+
+	// Ensure we own the data before modifying (COW protection)
+	c.cowEnsureOwned()
 
 	bmp := c.bmp()
 	arr := make([]uint16, 0, c.Size)

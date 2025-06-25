@@ -483,3 +483,460 @@ func TestContainerOptimization(t *testing.T) {
 		assert.Equal(t, typeRun, c.Type)
 	})
 }
+
+func TestCopyOnWrite(t *testing.T) {
+	t.Run("basic_cow_sharing", func(t *testing.T) {
+		// Create original bitmap
+		original := New()
+		for i := 0; i < 1000; i++ {
+			original.Set(uint32(i))
+		}
+
+		// Clone using COW
+		clone := original.Clone(nil)
+
+		// Verify both have the same content
+		assert.Equal(t, original.Count(), clone.Count())
+
+		// Verify they share the same underlying data initially
+		origContainer, exists := original.findContainer(0)
+		assert.True(t, exists)
+		cloneContainer, exists := clone.findContainer(0)
+		assert.True(t, exists)
+
+		// Both should be marked as shared
+		assert.True(t, origContainer.shared, "Original container should be shared")
+		assert.True(t, cloneContainer.shared, "Clone container should be shared")
+
+		// Data slices should point to the same underlying array
+		assert.Equal(t, &origContainer.Data[0], &cloneContainer.Data[0], "Should share data pointers")
+	})
+
+	t.Run("cow_trigger_on_set", func(t *testing.T) {
+		original := New()
+		for i := 0; i < 1000; i++ {
+			original.Set(uint32(i))
+		}
+		clone := original.Clone(nil)
+
+		// Verify initial state
+		assert.Equal(t, original.Count(), clone.Count())
+		origContainer, _ := original.findContainer(0)
+		cloneContainer, _ := clone.findContainer(0)
+		assert.True(t, origContainer.shared, "Original should be shared initially")
+		assert.True(t, cloneContainer.shared, "Clone should be shared initially")
+
+		// Store reference to verify sharing worked
+		sharedData := cloneContainer.Data
+
+		// Modify the original - this should trigger COW
+		original.Set(1500)
+
+		// After modification, sharing state should change
+		assert.False(t, origContainer.shared, "Original should not be shared after modification")
+		assert.True(t, cloneContainer.shared, "Clone should still be shared")
+
+		// Clone should still reference the original shared data
+		assert.Equal(t, sharedData, cloneContainer.Data, "Clone should still reference shared data")
+
+		// Verify counts and content isolation
+		assert.Equal(t, 1001, original.Count())
+		assert.Equal(t, 1000, clone.Count())
+		assert.False(t, clone.Contains(1500), "Clone should not contain new element")
+		assert.True(t, original.Contains(1500), "Original should contain new element")
+
+		// Verify all original elements are still in both
+		for i := 0; i < 1000; i++ {
+			assert.True(t, original.Contains(uint32(i)), "Original should still contain %d", i)
+			assert.True(t, clone.Contains(uint32(i)), "Clone should still contain %d", i)
+		}
+	})
+
+	t.Run("multiple_clones_sharing", func(t *testing.T) {
+		original := New()
+		for i := 0; i < 500; i++ {
+			original.Set(uint32(i))
+		}
+
+		clone1 := original.Clone(nil)
+		clone2 := original.Clone(nil)
+		clone3 := clone1.Clone(nil)
+
+		// All should share data initially
+		origContainer, _ := original.findContainer(0)
+		clone1Container, _ := clone1.findContainer(0)
+		clone2Container, _ := clone2.findContainer(0)
+		clone3Container, _ := clone3.findContainer(0)
+
+		assert.True(t, origContainer.shared)
+		assert.True(t, clone1Container.shared)
+		assert.True(t, clone2Container.shared)
+		assert.True(t, clone3Container.shared)
+
+		// All should point to same data
+		dataPtr := &origContainer.Data[0]
+		assert.Equal(t, dataPtr, &clone1Container.Data[0])
+		assert.Equal(t, dataPtr, &clone2Container.Data[0])
+		assert.Equal(t, dataPtr, &clone3Container.Data[0])
+
+		// Store shared data reference
+		sharedData := origContainer.Data
+
+		// Modify clone2 - only clone2 should break sharing
+		clone2.Set(600) // Should be in same container (600 >> 16 = 0)
+
+		// Verify sharing state after modification
+		assert.True(t, origContainer.shared, "Original should still be shared")
+		assert.True(t, clone1Container.shared, "Clone1 should still be shared")
+		assert.False(t, clone2Container.shared, "Clone2 should not be shared")
+		assert.True(t, clone3Container.shared, "Clone3 should still be shared")
+
+		// Original, clone1, and clone3 should still reference shared data
+		assert.Equal(t, sharedData, origContainer.Data)
+		assert.Equal(t, sharedData, clone1Container.Data)
+		assert.Equal(t, sharedData, clone3Container.Data)
+		assert.NotEqual(t, sharedData, clone2Container.Data)
+
+		// Verify content
+		assert.False(t, original.Contains(600))
+		assert.False(t, clone1.Contains(600))
+		assert.True(t, clone2.Contains(600))
+		assert.False(t, clone3.Contains(600))
+	})
+
+	t.Run("cow_with_different_operations", func(t *testing.T) {
+		original := New()
+		for i := 0; i < 1000; i++ {
+			original.Set(uint32(i))
+		}
+
+		// Test COW with Remove
+		clone1 := original.Clone(nil)
+		clone1.Remove(500)
+		assert.True(t, original.Contains(500))
+		assert.False(t, clone1.Contains(500))
+
+		// Test COW with Filter
+		clone2 := original.Clone(nil)
+		clone2.Filter(func(x uint32) bool { return x%2 == 0 })
+		assert.True(t, original.Contains(501)) // odd number
+		assert.False(t, clone2.Contains(501))
+		assert.True(t, clone2.Contains(500)) // even number
+
+		// Test COW with Optimize
+		clone3 := original.Clone(nil)
+		clone3.Optimize()
+		// Both should have same content after optimize
+		assert.Equal(t, original.Count(), clone3.Count())
+		for i := 0; i < 1000; i++ {
+			assert.Equal(t, original.Contains(uint32(i)), clone3.Contains(uint32(i)))
+		}
+	})
+
+	t.Run("cow_with_different_container_types", func(t *testing.T) {
+		// Test with array container
+		arrayBitmap := New()
+		for i := 0; i < 10; i++ {
+			arrayBitmap.Set(uint32(i * 100)) // sparse
+		}
+		arrayClone := arrayBitmap.Clone(nil)
+		arrayBitmap.Set(1500)
+		assert.False(t, arrayClone.Contains(1500))
+
+		// Test with bitmap container
+		bitmapBitmap := New()
+		for i := 0; i < 5000; i++ {
+			bitmapBitmap.Set(uint32(i * 2)) // dense enough for bitmap
+		}
+		bitmapClone := bitmapBitmap.Clone(nil)
+		bitmapBitmap.Remove(1000)
+		assert.True(t, bitmapClone.Contains(1000))
+
+		// Test with run container
+		runBitmap := New()
+		for i := 10000; i < 20000; i++ {
+			runBitmap.Set(uint32(i)) // consecutive for run
+		}
+		runBitmap.Optimize()
+		runClone := runBitmap.Clone(nil)
+		runBitmap.Remove(15000)
+		assert.True(t, runClone.Contains(15000))
+	})
+}
+
+func TestCopyOnWriteAnd(t *testing.T) {
+	t.Run("and_triggers_cow", func(t *testing.T) {
+		original := New()
+		for i := 0; i < 1000; i++ {
+			original.Set(uint32(i))
+		}
+
+		other := New()
+		for i := 500; i < 1500; i++ {
+			other.Set(uint32(i))
+		}
+
+		clone := original.Clone(nil)
+
+		// Verify initial sharing
+		origContainer, _ := original.findContainer(0)
+		cloneContainer, _ := clone.findContainer(0)
+		assert.True(t, origContainer.shared)
+		assert.True(t, cloneContainer.shared)
+		assert.Equal(t, &origContainer.Data[0], &cloneContainer.Data[0])
+
+		// Perform AND operation - should trigger COW
+		original.And(other)
+
+		// Verify COW triggered
+		assert.False(t, origContainer.shared, "Original should not be shared after AND")
+		assert.True(t, cloneContainer.shared, "Clone should still be shared")
+		assert.NotEqual(t, &origContainer.Data[0], &cloneContainer.Data[0], "Data pointers should differ")
+
+		// Verify AND operation worked correctly
+		expectedIntersection := 500 // [0,999] ∩ [500,1499] = [500,999]
+		assert.Equal(t, expectedIntersection, original.Count())
+		assert.Equal(t, 1000, clone.Count(), "Clone should have original count")
+
+		// Verify specific values
+		assert.True(t, original.Contains(500), "Original should contain intersection start")
+		assert.True(t, original.Contains(999), "Original should contain intersection end")
+		assert.False(t, original.Contains(100), "Original should not contain pre-intersection")
+		assert.False(t, original.Contains(1100), "Original should not contain post-intersection")
+
+		assert.True(t, clone.Contains(100), "Clone should contain all original values")
+		assert.True(t, clone.Contains(999), "Clone should contain all original values")
+	})
+
+	t.Run("multiple_clones_and_operations", func(t *testing.T) {
+		base := New()
+		for i := 0; i < 2000; i++ {
+			base.Set(uint32(i))
+		}
+
+		clone1 := base.Clone(nil)
+		clone2 := base.Clone(nil)
+		clone3 := base.Clone(nil)
+
+		// Create different AND operands
+		mask1 := New()
+		for i := 0; i < 1000; i++ {
+			mask1.Set(uint32(i))
+		}
+
+		mask2 := New()
+		for i := 500; i < 1500; i++ {
+			mask2.Set(uint32(i))
+		}
+
+		// Perform different operations
+		clone1.And(mask1) // [0, 999]
+		clone2.And(mask2) // [500, 1499]
+
+		// Verify all have different content
+		assert.Equal(t, 2000, base.Count(), "Base should be unchanged")
+		assert.Equal(t, 1000, clone1.Count(), "Clone1 should have 1000 elements")
+		assert.Equal(t, 1000, clone2.Count(), "Clone2 should have 1000 elements")
+		assert.Equal(t, 2000, clone3.Count(), "Clone3 should be unchanged")
+
+		// Verify no cross-contamination
+		assert.True(t, base.Contains(1900))
+		assert.False(t, clone1.Contains(1900))
+		assert.False(t, clone2.Contains(1900))
+		assert.True(t, clone3.Contains(1900))
+
+		assert.True(t, clone1.Contains(100))
+		assert.False(t, clone2.Contains(100))
+		assert.True(t, clone2.Contains(1400))
+		assert.False(t, clone1.Contains(1400))
+	})
+}
+
+func TestCopyOnWriteEdgeCases(t *testing.T) {
+	t.Run("empty_bitmap_cow", func(t *testing.T) {
+		empty := New()
+		clone := empty.Clone(nil)
+
+		assert.Equal(t, 0, empty.Count())
+		assert.Equal(t, 0, clone.Count())
+
+		// Modifying empty should work
+		empty.Set(100)
+		assert.True(t, empty.Contains(100))
+		assert.False(t, clone.Contains(100))
+		assert.Equal(t, 1, empty.Count())
+		assert.Equal(t, 0, clone.Count())
+	})
+
+	t.Run("single_element_cow", func(t *testing.T) {
+		single := New()
+		single.Set(42)
+		clone := single.Clone(nil)
+
+		origContainer, _ := single.findContainer(0)
+		cloneContainer, _ := clone.findContainer(0)
+		assert.True(t, origContainer.shared)
+		assert.True(t, cloneContainer.shared)
+
+		// Remove from original
+		single.Remove(42)
+		assert.False(t, single.Contains(42))
+		assert.True(t, clone.Contains(42))
+	})
+
+	t.Run("cow_after_clear", func(t *testing.T) {
+		original := New()
+		for i := 0; i < 1000; i++ {
+			original.Set(uint32(i))
+		}
+		clone := original.Clone(nil)
+
+		// Clear original
+		original.Clear()
+		assert.Equal(t, 0, original.Count())
+		assert.Equal(t, 1000, clone.Count())
+		assert.True(t, clone.Contains(500))
+	})
+
+	t.Run("clone_of_clone_chains", func(t *testing.T) {
+		root := New()
+		for i := 0; i < 100; i++ {
+			root.Set(uint32(i))
+		}
+
+		// Create chain of clones
+		level1 := root.Clone(nil)
+		level2 := level1.Clone(nil)
+		level3 := level2.Clone(nil)
+		level4 := level3.Clone(nil)
+
+		// All should share data
+		rootContainer, _ := root.findContainer(0)
+		l1Container, _ := level1.findContainer(0)
+		l2Container, _ := level2.findContainer(0)
+		l3Container, _ := level3.findContainer(0)
+		l4Container, _ := level4.findContainer(0)
+
+		dataPtr := &rootContainer.Data[0]
+		assert.Equal(t, dataPtr, &l1Container.Data[0])
+		assert.Equal(t, dataPtr, &l2Container.Data[0])
+		assert.Equal(t, dataPtr, &l3Container.Data[0])
+		assert.Equal(t, dataPtr, &l4Container.Data[0])
+
+		// Modify middle of chain
+		level2.Set(200)
+
+		// level2 should break sharing, others should still share
+		assert.True(t, rootContainer.shared)
+		assert.True(t, l1Container.shared)
+		assert.False(t, l2Container.shared)
+		assert.True(t, l3Container.shared)
+		assert.True(t, l4Container.shared)
+
+		// Verify content isolation
+		assert.False(t, root.Contains(200))
+		assert.False(t, level1.Contains(200))
+		assert.True(t, level2.Contains(200))
+		assert.False(t, level3.Contains(200))
+		assert.False(t, level4.Contains(200))
+	})
+
+	t.Run("cow_with_optimization_changes", func(t *testing.T) {
+		// Create bitmap that will change container types during optimization
+		rb := New()
+
+		// Start with array (sparse)
+		for i := 0; i < 10; i++ {
+			rb.Set(uint32(i * 1000))
+		}
+		container, _ := rb.findContainer(0)
+		assert.Equal(t, typeArray, container.Type)
+
+		clone := rb.Clone(nil)
+
+		// Add enough to trigger bitmap conversion
+		for i := 0; i < 3000; i++ {
+			rb.Set(uint32(i * 2))
+		}
+		rb.Optimize()
+
+		container, _ = rb.findContainer(0)
+		assert.Equal(t, typeBitmap, container.Type)
+
+		// Clone should still be array with original content
+		cloneContainer, _ := clone.findContainer(0)
+		assert.Equal(t, typeArray, cloneContainer.Type)
+		assert.Equal(t, 10, clone.Count())
+		assert.True(t, clone.Contains(5000))
+		assert.False(t, clone.Contains(10)) // rb added this
+	})
+
+	t.Run("stress_many_clones", func(t *testing.T) {
+		base := New()
+		for i := 0; i < 1000; i++ {
+			base.Set(uint32(i))
+		}
+
+		// Create many clones
+		clones := make([]*Bitmap, 50)
+		for i := range clones {
+			clones[i] = base.Clone(nil)
+		}
+
+		// All should share data initially
+		baseContainer, _ := base.findContainer(0)
+		baseDataPtr := &baseContainer.Data[0]
+
+		for i, clone := range clones {
+			container, exists := clone.findContainer(0)
+			assert.True(t, exists, "Clone %d should have container", i)
+			assert.True(t, container.shared, "Clone %d should be shared", i)
+			assert.Equal(t, baseDataPtr, &container.Data[0], "Clone %d should share data", i)
+		}
+
+		// Modify every 5th clone
+		for i := 0; i < len(clones); i += 5 {
+			clones[i].Set(uint32(2000 + i))
+		}
+
+		// Only modified clones should break sharing
+		for i, clone := range clones {
+			container, _ := clone.findContainer(0)
+			if i%5 == 0 {
+				assert.False(t, container.shared, "Modified clone %d should not be shared", i)
+				assert.True(t, clone.Contains(uint32(2000+i)), "Clone %d should contain new element", i)
+			} else {
+				assert.True(t, container.shared, "Unmodified clone %d should still be shared", i)
+				assert.False(t, clone.Contains(uint32(2000+i)), "Clone %d should not contain other's element", i)
+			}
+		}
+	})
+
+	t.Run("cow_preserves_container_metadata", func(t *testing.T) {
+		original := New()
+		for i := 0; i < 100; i++ {
+			original.Set(uint32(i))
+		}
+
+		// Access container to increment Call count
+		container, _ := original.findContainer(0)
+		originalCall := container.Call
+		originalSize := container.Size
+		originalType := container.Type
+
+		clone := original.Clone(nil)
+		cloneContainer, _ := clone.findContainer(0)
+
+		// Metadata should be preserved in clone
+		assert.Equal(t, originalCall, cloneContainer.Call)
+		assert.Equal(t, originalSize, cloneContainer.Size)
+		assert.Equal(t, originalType, cloneContainer.Type)
+
+		// After COW, metadata should still be preserved but independent
+		original.Set(200)
+
+		assert.Equal(t, originalCall, cloneContainer.Call, "Clone metadata should be preserved")
+		assert.Equal(t, originalSize, cloneContainer.Size, "Clone size should be preserved")
+		assert.Equal(t, originalType, cloneContainer.Type, "Clone type should be preserved")
+	})
+}

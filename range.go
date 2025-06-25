@@ -36,6 +36,7 @@ func (rb *Bitmap) Range(fn func(x uint32)) {
 func (rb *Bitmap) Filter(f func(x uint32) bool) {
 	rb.containers(func(base uint32, c *container) {
 		rb.scratch = rb.scratch[:0]
+		c.cowEnsureOwned()
 
 		switch c.Type {
 		case typeArray:
