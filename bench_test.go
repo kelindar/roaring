@@ -35,6 +35,14 @@ func BenchmarkRange(b *testing.B) {
 	}
 }
 
+func BenchmarkAnd(b *testing.B) {
+	for _, size := range []int{1000, 1000000} {
+		for _, shape := range []fnShape{dataSeq(size, 0), dataRand(size, uint32(size)), dataSparse(size), dataDense(size)} {
+			benchAnd(b, fmt.Sprintf("and-%d", size), shape)
+		}
+	}
+}
+
 // ---------------------------------------- Benchmarking ----------------------------------------
 
 // benchRange runs a benchmark for the Range operation
@@ -170,4 +178,44 @@ func dataDense(size int) fnShape {
 		}
 		return data, "dns"
 	}
+}
+
+// benchAnd runs a benchmark for the And operation
+func benchAnd(b *testing.B, name string, gen fnShape) {
+	data, shape := gen()
+	our1, ref1 := random(data)
+	our2, ref2 := random(data)
+
+	b.Run(fmt.Sprintf("%s-%s", name, shape), func(b *testing.B) {
+		// Measure reference implementation speed
+		start := time.Now()
+		refIterations := 0
+		for time.Since(start) < time.Second {
+			refClone1 := ref1.Clone()
+			refClone2 := ref2.Clone()
+			refClone1.And(refClone2)
+			refIterations++
+		}
+		refTime := time.Since(start)
+		f0 := float64(refIterations) / refTime.Seconds()
+
+		// Measure our implementation speed
+		b.ResetTimer()
+		b.ReportAllocs()
+		start = time.Now()
+
+		ourIterations := 0
+		for time.Since(start) < time.Second {
+			ourClone1 := our1.Clone(nil)
+			ourClone2 := our2.Clone(nil)
+			ourClone1.And(ourClone2)
+			ourIterations++
+		}
+		ourTime := time.Since(start)
+		f1 := float64(ourIterations) / ourTime.Seconds()
+
+		b.ReportMetric(1e9/f1, "ns/op") // Time per operation
+		b.ReportMetric(f1/1e6, "M/s")   // Operations per second (in millions)
+		b.ReportMetric(f1/f0*100, "%")  // Speedup ratio
+	})
 }
