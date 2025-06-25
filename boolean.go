@@ -266,12 +266,8 @@ func (rb *Bitmap) andArrayBitmap(c1, c2 *container) bool {
 		return false
 	}
 	
-	// Pre-allocate result with better size estimation
-	resultCapacity := len(arr)
-	if resultCapacity > 64 {
-		resultCapacity = 64 // Cap for memory efficiency
-	}
-	result := make([]uint16, 0, resultCapacity)
+	// Pre-allocate result with exact size to avoid reallocations
+	result := make([]uint16, 0, len(arr))
 
 	// Direct bit manipulation is faster than Contains() method calls
 	for _, val := range arr {
