@@ -4,6 +4,38 @@ import (
 	"math/bits"
 )
 
+// min returns the smaller of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// max returns the larger of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// maxUint8 returns the larger of two uint8 values
+func maxUint8(a, b uint8) uint8 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// minUint8 returns the smaller of two uint8 values
+func minUint8(a, b uint8) uint8 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // And performs bitwise AND operation with other bitmap(s)
 func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 	// Handle nil inputs efficiently
@@ -50,8 +82,8 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 	}
 
 	// Find intersection of container ranges using span optimization
-	minStart := max(rb.span[0], other.span[0])
-	minEnd := min(rb.span[1], other.span[1])
+	minStart := maxUint8(rb.span[0], other.span[0])
+	minEnd := minUint8(rb.span[1], other.span[1])
 
 	if minStart > minEnd {
 		rb.Clear()
@@ -71,9 +103,6 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 		block := rb.blocks[i]
 		otherBlock := other.blocks[i]
 
-		if block != nil || otherBlock != nil {
-		}
-
 		if block == nil || otherBlock == nil {
 			// No intersection at this block level
 			if block != nil {
@@ -87,8 +116,8 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 		}
 
 		// Find intersection within blocks
-		blockMinStart := max(block.span[0], otherBlock.span[0])
-		blockMinEnd := min(block.span[1], otherBlock.span[1])
+		blockMinStart := maxUint8(block.span[0], otherBlock.span[0])
+		blockMinEnd := minUint8(block.span[1], otherBlock.span[1])
 
 		if blockMinStart > blockMinEnd {
 			// No intersection at container level - remove entire block
@@ -104,9 +133,6 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 		for j := int(blockMinStart); j <= int(blockMinEnd); j++ {
 			c1 := block.content[j]
 			c2 := otherBlock.content[j]
-
-			if c1 != nil || c2 != nil {
-			}
 
 			if c1 == nil || c2 == nil {
 				if c1 != nil {
@@ -193,8 +219,24 @@ func (rb *Bitmap) andArrayArray(c1, c2 *container) bool {
 		return false
 	}
 
-	// Create temporary result to avoid overwriting source array
-	result := make([]uint16, 0, len(arr1))
+	// Optimize for very small arrays - linear search can be faster
+	if len(arr1) <= 8 && len(arr2) <= 8 {
+		result := make([]uint16, 0, min(len(arr1), len(arr2)))
+		for _, v1 := range arr1 {
+			for _, v2 := range arr2 {
+				if v1 == v2 {
+					result = append(result, v1)
+					break
+				}
+			}
+		}
+		c1.Data = result
+		c1.Size = uint32(len(result))
+		return len(result) > 0
+	}
+
+	// Two-pointer approach for larger arrays
+	result := make([]uint16, 0, min(len(arr1), len(arr2)))
 	i, j := 0, 0
 	for i < len(arr1) && j < len(arr2) {
 		switch {
@@ -219,11 +261,23 @@ func (rb *Bitmap) andArrayBitmap(c1, c2 *container) bool {
 	arr := c1.arr()
 	bmp := c2.bmp()
 	
-	// Create a temporary result array to avoid overwriting the source array
-	result := make([]uint16, 0, len(arr))
+	if len(arr) == 0 || len(bmp) == 0 {
+		c1.Size = 0
+		return false
+	}
+	
+	// Pre-allocate result with better size estimation
+	resultCapacity := len(arr)
+	if resultCapacity > 64 {
+		resultCapacity = 64 // Cap for memory efficiency
+	}
+	result := make([]uint16, 0, resultCapacity)
 
+	// Direct bit manipulation is faster than Contains() method calls
 	for _, val := range arr {
-		if bmp.Contains(uint32(val)) {
+		word := val >> 6       // Which 64-bit word
+		bit := val & 63        // Which bit within the word
+		if int(word) < len(bmp) && (bmp[word]&(uint64(1)<<bit)) != 0 {
 			result = append(result, val)
 		}
 	}
@@ -239,11 +293,19 @@ func (rb *Bitmap) andBitmapArray(c1, c2 *container) bool {
 	originalBmp := c1.bmp()
 	arr := c2.arr()
 
+	if len(arr) == 0 || len(originalBmp) == 0 {
+		c1.Size = 0
+		return false
+	}
+
 	// Create intersection array directly - more efficient than bitmap operations
 	result := make([]uint16, 0, len(arr))
 	
+	// Direct bit manipulation for better performance
 	for _, val := range arr {
-		if originalBmp.Contains(uint32(val)) {
+		word := val >> 6       // Which 64-bit word
+		bit := val & 63        // Which bit within the word
+		if int(word) < len(originalBmp) && (originalBmp[word]&(uint64(1)<<bit)) != 0 {
 			result = append(result, val)
 		}
 	}
