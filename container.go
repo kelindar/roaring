@@ -16,39 +16,36 @@ const (
 )
 
 type container struct {
-	Key    uint16   // High 16 bits of the value range this container handles
 	Type   ctype    // Type of the container
+	Shared bool     // COW: true if data is shared between containers
 	Call   uint16   // Call count
 	Size   uint32   // Cardinality
 	Data   []uint16 // Data of the container
-	shared bool     // COW: true if data is shared between containers
 }
 
 type run [2]uint16
 
 // cowEnsureOwned ensures the container owns its data before modification
 func (c *container) cowEnsureOwned() {
-	if c.shared {
+	if c.Shared {
 		clone := make([]uint16, len(c.Data), cap(c.Data))
 		copy(clone, c.Data)
 		c.Data = clone
-		c.shared = false
+		c.Shared = false
 	}
 }
 
 // cowClone creates a copy-on-write clone of the container
 func (c *container) cowClone() *container {
 	clone := &container{
-		Key:    c.Key,
 		Type:   c.Type,
 		Call:   c.Call,
 		Size:   c.Size,
-		shared: true,
+		Data:   c.Data,
+		Shared: true,
 	}
 
-	// Share the data slice initially (COW)
-	clone.Data = c.Data
-	c.shared = true // Mark original as shared too
+	c.Shared = true
 	return clone
 }
 

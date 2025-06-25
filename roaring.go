@@ -130,7 +130,6 @@ func (rb *Bitmap) ctrFind(hi uint16) (*container, bool) {
 
 // ctrAdd sets a container at the given high bits
 func (rb *Bitmap) ctrAdd(hi uint16, c *container) {
-	c.Key = hi
 	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
 
 	// Get or create the container block
@@ -165,7 +164,7 @@ func (rb *Bitmap) ctrDel(hi uint16) {
 func (rb *Bitmap) containers(fn func(base uint32, c *container)) {
 	rb.blocks.iterate(func(hi8 uint8, cblk *cblock) {
 		cblk.iterate(func(lo8 uint8, c *container) {
-			fn(uint32(c.Key)<<16, c)
+			fn((uint32(hi8)<<24)|uint32(lo8)<<16, c)
 		})
 	})
 }

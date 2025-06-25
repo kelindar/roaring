@@ -505,8 +505,8 @@ func TestCopyOnWrite(t *testing.T) {
 		assert.True(t, exists)
 
 		// Both should be marked as shared
-		assert.True(t, origContainer.shared, "Original container should be shared")
-		assert.True(t, cloneContainer.shared, "Clone container should be shared")
+		assert.True(t, origContainer.Shared, "Original container should be shared")
+		assert.True(t, cloneContainer.Shared, "Clone container should be shared")
 
 		// Data slices should point to the same underlying array
 		assert.Equal(t, &origContainer.Data[0], &cloneContainer.Data[0], "Should share data pointers")
@@ -523,8 +523,8 @@ func TestCopyOnWrite(t *testing.T) {
 		assert.Equal(t, original.Count(), clone.Count())
 		origContainer, _ := original.ctrFind(0)
 		cloneContainer, _ := clone.ctrFind(0)
-		assert.True(t, origContainer.shared, "Original should be shared initially")
-		assert.True(t, cloneContainer.shared, "Clone should be shared initially")
+		assert.True(t, origContainer.Shared, "Original should be shared initially")
+		assert.True(t, cloneContainer.Shared, "Clone should be shared initially")
 
 		// Store reference to verify sharing worked
 		sharedData := cloneContainer.Data
@@ -533,8 +533,8 @@ func TestCopyOnWrite(t *testing.T) {
 		original.Set(1500)
 
 		// After modification, sharing state should change
-		assert.False(t, origContainer.shared, "Original should not be shared after modification")
-		assert.True(t, cloneContainer.shared, "Clone should still be shared")
+		assert.False(t, origContainer.Shared, "Original should not be shared after modification")
+		assert.True(t, cloneContainer.Shared, "Clone should still be shared")
 
 		// Clone should still reference the original shared data
 		assert.Equal(t, sharedData, cloneContainer.Data, "Clone should still reference shared data")
@@ -568,10 +568,10 @@ func TestCopyOnWrite(t *testing.T) {
 		clone2Container, _ := clone2.ctrFind(0)
 		clone3Container, _ := clone3.ctrFind(0)
 
-		assert.True(t, origContainer.shared)
-		assert.True(t, clone1Container.shared)
-		assert.True(t, clone2Container.shared)
-		assert.True(t, clone3Container.shared)
+		assert.True(t, origContainer.Shared)
+		assert.True(t, clone1Container.Shared)
+		assert.True(t, clone2Container.Shared)
+		assert.True(t, clone3Container.Shared)
 
 		// All should point to same data
 		dataPtr := &origContainer.Data[0]
@@ -586,10 +586,10 @@ func TestCopyOnWrite(t *testing.T) {
 		clone2.Set(600) // Should be in same container (600 >> 16 = 0)
 
 		// Verify sharing state after modification
-		assert.True(t, origContainer.shared, "Original should still be shared")
-		assert.True(t, clone1Container.shared, "Clone1 should still be shared")
-		assert.False(t, clone2Container.shared, "Clone2 should not be shared")
-		assert.True(t, clone3Container.shared, "Clone3 should still be shared")
+		assert.True(t, origContainer.Shared, "Original should still be shared")
+		assert.True(t, clone1Container.Shared, "Clone1 should still be shared")
+		assert.False(t, clone2Container.Shared, "Clone2 should not be shared")
+		assert.True(t, clone3Container.Shared, "Clone3 should still be shared")
 
 		// Original, clone1, and clone3 should still reference shared data
 		assert.Equal(t, sharedData, origContainer.Data)
@@ -681,16 +681,16 @@ func TestCopyOnWriteAnd(t *testing.T) {
 		// Verify initial sharing
 		origContainer, _ := original.ctrFind(0)
 		cloneContainer, _ := clone.ctrFind(0)
-		assert.True(t, origContainer.shared)
-		assert.True(t, cloneContainer.shared)
+		assert.True(t, origContainer.Shared)
+		assert.True(t, cloneContainer.Shared)
 		assert.Equal(t, &origContainer.Data[0], &cloneContainer.Data[0])
 
 		// Perform AND operation - should trigger COW
 		original.And(other)
 
 		// Verify COW triggered
-		assert.False(t, origContainer.shared, "Original should not be shared after AND")
-		assert.True(t, cloneContainer.shared, "Clone should still be shared")
+		assert.False(t, origContainer.Shared, "Original should not be shared after AND")
+		assert.True(t, cloneContainer.Shared, "Clone should still be shared")
 		assert.NotEqual(t, &origContainer.Data[0], &cloneContainer.Data[0], "Data pointers should differ")
 
 		// Verify AND operation worked correctly
@@ -775,8 +775,8 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 
 		origContainer, _ := single.ctrFind(0)
 		cloneContainer, _ := clone.ctrFind(0)
-		assert.True(t, origContainer.shared)
-		assert.True(t, cloneContainer.shared)
+		assert.True(t, origContainer.Shared)
+		assert.True(t, cloneContainer.Shared)
 
 		// Remove from original
 		single.Remove(42)
@@ -827,11 +827,11 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		level2.Set(200)
 
 		// level2 should break sharing, others should still share
-		assert.True(t, rootContainer.shared)
-		assert.True(t, l1Container.shared)
-		assert.False(t, l2Container.shared)
-		assert.True(t, l3Container.shared)
-		assert.True(t, l4Container.shared)
+		assert.True(t, rootContainer.Shared)
+		assert.True(t, l1Container.Shared)
+		assert.False(t, l2Container.Shared)
+		assert.True(t, l3Container.Shared)
+		assert.True(t, l4Container.Shared)
 
 		// Verify content isolation
 		assert.False(t, root.Contains(200))
@@ -890,7 +890,7 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		for i, clone := range clones {
 			container, exists := clone.ctrFind(0)
 			assert.True(t, exists, "Clone %d should have container", i)
-			assert.True(t, container.shared, "Clone %d should be shared", i)
+			assert.True(t, container.Shared, "Clone %d should be shared", i)
 			assert.Equal(t, baseDataPtr, &container.Data[0], "Clone %d should share data", i)
 		}
 
@@ -903,10 +903,10 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		for i, clone := range clones {
 			container, _ := clone.ctrFind(0)
 			if i%5 == 0 {
-				assert.False(t, container.shared, "Modified clone %d should not be shared", i)
+				assert.False(t, container.Shared, "Modified clone %d should not be shared", i)
 				assert.True(t, clone.Contains(uint32(2000+i)), "Clone %d should contain new element", i)
 			} else {
-				assert.True(t, container.shared, "Unmodified clone %d should still be shared", i)
+				assert.True(t, container.Shared, "Unmodified clone %d should still be shared", i)
 				assert.False(t, clone.Contains(uint32(2000+i)), "Clone %d should not contain other's element", i)
 			}
 		}

@@ -70,7 +70,8 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 			// No intersection at this block level
 			if cblk != nil {
 				cblk.iterate(func(lo8 uint8, c *container) {
-					emptyContainers = append(emptyContainers, c.Key)
+					key := (uint16(i) << 8) | uint16(lo8)
+					emptyContainers = append(emptyContainers, key)
 				})
 			}
 			continue
@@ -83,7 +84,8 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 		if blockMinStart > blockMinEnd {
 			// No intersection at container level - remove entire block
 			cblk.iterate(func(lo8 uint8, c *container) {
-				emptyContainers = append(emptyContainers, c.Key)
+				key := (uint16(i) << 8) | uint16(lo8)
+				emptyContainers = append(emptyContainers, key)
 			})
 			continue
 		}
@@ -95,26 +97,30 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 
 			if c1 == nil || c2 == nil {
 				if c1 != nil {
-					emptyContainers = append(emptyContainers, c1.Key)
+					key := (uint16(i) << 8) | uint16(j)
+					emptyContainers = append(emptyContainers, key)
 				}
 				continue
 			}
 
 			// Perform container AND
 			if !rb.andContainers(c1, c2) {
-				emptyContainers = append(emptyContainers, c1.Key)
+				key := (uint16(i) << 8) | uint16(j)
+				emptyContainers = append(emptyContainers, key)
 			}
 		}
 
 		// Remove containers outside intersection range
 		for j := int(cblk.span[0]); j < int(blockMinStart); j++ {
 			if c := cblk.get(uint8(j)); c != nil {
-				emptyContainers = append(emptyContainers, c.Key)
+				key := (uint16(i) << 8) | uint16(j)
+				emptyContainers = append(emptyContainers, key)
 			}
 		}
 		for j := int(blockMinEnd) + 1; j <= int(cblk.span[1]); j++ {
 			if c := cblk.get(uint8(j)); c != nil {
-				emptyContainers = append(emptyContainers, c.Key)
+				key := (uint16(i) << 8) | uint16(j)
+				emptyContainers = append(emptyContainers, key)
 			}
 		}
 	}
@@ -123,14 +129,16 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 	for i := int(rb.blocks.span[0]); i < int(minStart); i++ {
 		if cblk := rb.blocks.get(uint8(i)); cblk != nil {
 			cblk.iterate(func(lo8 uint8, c *container) {
-				emptyContainers = append(emptyContainers, c.Key)
+				key := (uint16(i) << 8) | uint16(lo8)
+				emptyContainers = append(emptyContainers, key)
 			})
 		}
 	}
 	for i := int(minEnd) + 1; i <= int(rb.blocks.span[1]); i++ {
 		if cblk := rb.blocks.get(uint8(i)); cblk != nil {
 			cblk.iterate(func(lo8 uint8, c *container) {
-				emptyContainers = append(emptyContainers, c.Key)
+				key := (uint16(i) << 8) | uint16(lo8)
+				emptyContainers = append(emptyContainers, key)
 			})
 		}
 	}
