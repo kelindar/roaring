@@ -4,11 +4,6 @@ import (
 	"io"
 )
 
-type cindex struct {
-	span  [2]uint8
-	count int
-}
-
 // cblock represents a block of containers for the two-level index
 type cblock struct {
 	content [256]*container // 256 slots for containers with same high 8 bits
@@ -30,8 +25,6 @@ func New() *Bitmap {
 // Returns (container, found) where container is nil if not found
 func (rb *Bitmap) findContainer(hi uint16) (*container, bool) {
 	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
-
-	// Look up in two-level index
 	block := rb.blocks[hi8]
 	if block == nil {
 		return nil, false
@@ -54,40 +47,13 @@ func (rb *Bitmap) setContainer(hi uint16, c *container) {
 		block = &cblock{cindex: cindex{span: [2]uint8{lo8, lo8}}}
 		rb.blocks[hi8] = block
 		rb.count++
-
-		// Update bitmap-level span for new block
-		if rb.count == 1 {
-			// First block in bitmap
-			rb.span[0] = hi8
-			rb.span[1] = hi8
-		} else {
-			// Update bounds
-			if hi8 < rb.span[0] {
-				rb.span[0] = hi8
-			}
-			if hi8 > rb.span[1] {
-				rb.span[1] = hi8
-			}
-		}
+		rb.cindex.update(hi8)
 	}
 
 	// Set the container in the block
 	if block.content[lo8] == nil {
 		block.count++
-		// Update span for new container
-		if block.count == 1 {
-			// First container in block
-			block.span[0] = lo8
-			block.span[1] = lo8
-		} else {
-			// Update bounds
-			if lo8 < block.span[0] {
-				block.span[0] = lo8
-			}
-			if lo8 > block.span[1] {
-				block.span[1] = lo8
-			}
-		}
+		block.cindex.update(lo8)
 	}
 	block.content[lo8] = c
 }
@@ -112,65 +78,16 @@ func (rb *Bitmap) removeContainer(hi uint16) {
 
 			// Update bitmap-level span if necessary
 			if rb.count == 0 {
-				// Bitmap is empty - bounds don't matter
 				return
 			} else if hi8 == rb.span[0] || hi8 == rb.span[1] {
-				// Need to recalculate bitmap bounds
-				rb.updateBitmapBounds()
+				rb.cindex.reload(func(i uint8) bool { return rb.blocks[i] != nil })
 			}
 			return
 		}
 
 		// Update span if necessary
 		if lo8 == block.span[0] || lo8 == block.span[1] {
-			// Need to recalculate bounds
-			block.updateBounds()
-		}
-	}
-}
-
-// updateBounds recalculates the min/max indices for a block
-func (b *cblock) updateBounds() {
-	if b.count == 0 {
-		return
-	}
-
-	// Find new min
-	for i := 0; i < 256; i++ {
-		if b.content[i] != nil {
-			b.span[0] = uint8(i)
-			break
-		}
-	}
-
-	// Find new max
-	for i := 255; i >= 0; i-- {
-		if b.content[i] != nil {
-			b.span[1] = uint8(i)
-			break
-		}
-	}
-}
-
-// updateBitmapBounds recalculates the min/max block indices for the bitmap
-func (rb *Bitmap) updateBitmapBounds() {
-	if rb.count == 0 {
-		return
-	}
-
-	// Find new min block
-	for i := 0; i < 256; i++ {
-		if rb.blocks[i] != nil {
-			rb.span[0] = uint8(i)
-			break
-		}
-	}
-
-	// Find new max block
-	for i := 255; i >= 0; i-- {
-		if rb.blocks[i] != nil {
-			rb.span[1] = uint8(i)
-			break
+			block.cindex.reload(func(i uint8) bool { return block.content[i] != nil })
 		}
 	}
 }
@@ -324,4 +241,50 @@ func FromBytes(buffer []byte) *Bitmap {
 // ReadFrom reads a roaring bitmap from an io.Reader
 func ReadFrom(r io.Reader) (*Bitmap, error) {
 	panic("not implemented")
+}
+
+// ---------------------------------------- Index ----------------------------------------
+
+type cindex struct {
+	span  [2]uint8
+	count int
+}
+
+// update updates the span when adding a new index
+func (idx *cindex) update(newIdx uint8) {
+	switch idx.count {
+	case 1:
+		idx.span[0] = newIdx
+		idx.span[1] = newIdx
+	default:
+		if newIdx < idx.span[0] {
+			idx.span[0] = newIdx
+		}
+		if newIdx > idx.span[1] {
+			idx.span[1] = newIdx
+		}
+	}
+}
+
+// reload recalculates span by scanning for non-nil items
+func (idx *cindex) reload(has func(uint8) bool) {
+	if idx.count == 0 {
+		return
+	}
+
+	// Find new min
+	for i := 0; i < 256; i++ {
+		if has(uint8(i)) {
+			idx.span[0] = uint8(i)
+			break
+		}
+	}
+
+	// Find new max
+	for i := 255; i >= 0; i-- {
+		if has(uint8(i)) {
+			idx.span[1] = uint8(i)
+			break
+		}
+	}
 }
