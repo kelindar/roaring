@@ -2,6 +2,14 @@ package roaring
 
 import "unsafe"
 
+// max returns the maximum of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // run converts the container to a []run
 func (c *container) run() []run {
 	if len(c.Data) == 0 {
@@ -15,9 +23,23 @@ func (c *container) run() []run {
 func (c *container) runFind(value uint16) ([2]int, bool) {
 	runs := c.run()
 	if len(runs) == 0 {
-		return [2]int{-1, -1}, false
+		return [2]int{0, 0}, false
 	}
 
+	// Fast path for small containers - linear search is faster than binary search
+	if len(runs) <= 4 {
+		for i, run := range runs {
+			if value >= run[0] && value <= run[1] {
+				return [2]int{i, i}, true
+			}
+			if value < run[0] {
+				return [2]int{i, i}, false
+			}
+		}
+		return [2]int{len(runs), len(runs)}, false
+	}
+
+	// Binary search for larger containers
 	left, right := 0, len(runs)-1
 	for left <= right {
 		mid := (left + right) / 2
@@ -46,8 +68,8 @@ func (c *container) runSet(value uint16) bool {
 	idx := search[1]
 
 	// Check boundary cases for merging/extending
-	canMergeLeft := idx > 0 && runs[idx-1][1]+1 == value
-	canMergeRight := idx < len(runs) && runs[idx][0]-1 == value
+	canMergeLeft := idx > 0 && len(runs) > 0 && runs[idx-1][1]+1 == value
+	canMergeRight := idx < len(runs) && len(runs) > 0 && runs[idx][0]-1 == value
 
 	switch {
 	case canMergeLeft && canMergeRight:
@@ -104,18 +126,33 @@ func (c *container) runHas(value uint16) bool {
 func (c *container) runInsertRunAt(index int, newRun run) {
 	runs := c.run()
 	oldLen := len(runs)
+	newCapacity := (oldLen + 1) * 2
 
-	// Reallocate data to accommodate new run
-	c.Data = make([]uint16, (oldLen+1)*2)
-	newRuns := c.run()
+	// Try to avoid allocation if we have enough capacity
+	if cap(c.Data) >= newCapacity {
+		// Extend slice without reallocation
+		c.Data = c.Data[:newCapacity]
+		newRuns := c.run()
+		
+		// Move existing runs to make space
+		if index < oldLen {
+			copy(newRuns[index+1:], runs[index:])
+		}
+		newRuns[index] = newRun
+	} else {
+		// Need to allocate new slice with extra capacity for future insertions
+		extraCapacity := max(8, oldLen/2) // Add 25% extra capacity or minimum 8
+		c.Data = make([]uint16, newCapacity, newCapacity+extraCapacity*2)
+		newRuns := c.run()
 
-	// Copy existing runs with efficient bulk operations
-	if index > 0 {
-		copy(newRuns[:index], runs[:index])
-	}
-	newRuns[index] = newRun
-	if index < oldLen {
-		copy(newRuns[index+1:], runs[index:])
+		// Copy existing runs with efficient bulk operations
+		if index > 0 {
+			copy(newRuns[:index], runs[:index])
+		}
+		newRuns[index] = newRun
+		if index < oldLen {
+			copy(newRuns[index+1:], runs[index:])
+		}
 	}
 }
 
@@ -128,21 +165,13 @@ func (c *container) runRemoveRunAt(index int) {
 
 	oldLen := len(runs)
 	if oldLen == 1 {
-		c.Data = nil
+		c.Data = c.Data[:0] // Keep capacity but set length to 0
 		return
 	}
 
-	// Reallocate data for smaller run array
-	c.Data = make([]uint16, (oldLen-1)*2)
-	newRuns := c.run()
-
-	// Copy runs efficiently, skipping the removed index
-	if index > 0 {
-		copy(newRuns[:index], runs[:index])
-	}
-	if index < oldLen-1 {
-		copy(newRuns[index:], runs[index+1:])
-	}
+	// Move runs in-place to avoid allocation
+	copy(runs[index:], runs[index+1:])
+	c.Data = c.Data[:(oldLen-1)*2] // Shrink slice length
 }
 
 // runOptimize tries to optimize the container
