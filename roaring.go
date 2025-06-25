@@ -4,15 +4,21 @@ import (
 	"io"
 )
 
+type cindex struct {
+	span  [2]uint8
+	count int
+}
+
 // cblock represents a block of containers for the two-level index
 type cblock struct {
-	containers [256]*container // 256 slots for containers with same high 8 bits
-	count      int             // Number of non-nil containers in this block
+	content [256]*container // 256 slots for containers with same high 8 bits
+	cindex
 }
 
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	index [256]*cblock // Level 1: index by high 8 bits of container key
+	blocks [256]*cblock // Level 1: index by high 8 bits of container key
+	cindex
 }
 
 // New creates a new empty roaring bitmap
@@ -26,12 +32,12 @@ func (rb *Bitmap) findContainer(hi uint16) (*container, bool) {
 	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
 
 	// Look up in two-level index
-	block := rb.index[hi8]
+	block := rb.blocks[hi8]
 	if block == nil {
 		return nil, false
 	}
 
-	if c := block.containers[lo8]; c != nil {
+	if c := block.content[lo8]; c != nil {
 		return c, true
 	}
 	return nil, false
@@ -43,35 +49,128 @@ func (rb *Bitmap) setContainer(hi uint16, c *container) {
 	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
 
 	// Get or create the block
-	block := rb.index[hi8]
+	block := rb.blocks[hi8]
 	if block == nil {
-		block = &cblock{}
-		rb.index[hi8] = block
+		block = &cblock{cindex: cindex{span: [2]uint8{lo8, lo8}}}
+		rb.blocks[hi8] = block
+		rb.count++
+
+		// Update bitmap-level span for new block
+		if rb.count == 1 {
+			// First block in bitmap
+			rb.span[0] = hi8
+			rb.span[1] = hi8
+		} else {
+			// Update bounds
+			if hi8 < rb.span[0] {
+				rb.span[0] = hi8
+			}
+			if hi8 > rb.span[1] {
+				rb.span[1] = hi8
+			}
+		}
 	}
 
 	// Set the container in the block
-	if block.containers[lo8] == nil {
+	if block.content[lo8] == nil {
 		block.count++
+		// Update span for new container
+		if block.count == 1 {
+			// First container in block
+			block.span[0] = lo8
+			block.span[1] = lo8
+		} else {
+			// Update bounds
+			if lo8 < block.span[0] {
+				block.span[0] = lo8
+			}
+			if lo8 > block.span[1] {
+				block.span[1] = lo8
+			}
+		}
 	}
-	block.containers[lo8] = c
+	block.content[lo8] = c
 }
 
 // removeContainer removes the container at the given high bits
 func (rb *Bitmap) removeContainer(hi uint16) {
 	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
 
-	block := rb.index[hi8]
+	block := rb.blocks[hi8]
 	if block == nil {
 		return
 	}
 
-	if block.containers[lo8] != nil {
-		block.containers[lo8] = nil
+	if block.content[lo8] != nil {
+		block.content[lo8] = nil
 		block.count--
 
 		// If block is empty, remove it
 		if block.count == 0 {
-			rb.index[hi8] = nil
+			rb.blocks[hi8] = nil
+			rb.count--
+
+			// Update bitmap-level span if necessary
+			if rb.count == 0 {
+				// Bitmap is empty - bounds don't matter
+				return
+			} else if hi8 == rb.span[0] || hi8 == rb.span[1] {
+				// Need to recalculate bitmap bounds
+				rb.updateBitmapBounds()
+			}
+			return
+		}
+
+		// Update span if necessary
+		if lo8 == block.span[0] || lo8 == block.span[1] {
+			// Need to recalculate bounds
+			block.updateBounds()
+		}
+	}
+}
+
+// updateBounds recalculates the min/max indices for a block
+func (b *cblock) updateBounds() {
+	if b.count == 0 {
+		return
+	}
+
+	// Find new min
+	for i := 0; i < 256; i++ {
+		if b.content[i] != nil {
+			b.span[0] = uint8(i)
+			break
+		}
+	}
+
+	// Find new max
+	for i := 255; i >= 0; i-- {
+		if b.content[i] != nil {
+			b.span[1] = uint8(i)
+			break
+		}
+	}
+}
+
+// updateBitmapBounds recalculates the min/max block indices for the bitmap
+func (rb *Bitmap) updateBitmapBounds() {
+	if rb.count == 0 {
+		return
+	}
+
+	// Find new min block
+	for i := 0; i < 256; i++ {
+		if rb.blocks[i] != nil {
+			rb.span[0] = uint8(i)
+			break
+		}
+	}
+
+	// Find new max block
+	for i := 255; i >= 0; i-- {
+		if rb.blocks[i] != nil {
+			rb.span[1] = uint8(i)
+			break
 		}
 	}
 }
@@ -118,10 +217,16 @@ func (rb *Bitmap) Contains(x uint32) bool {
 
 // Count returns the total number of bits set to 1 in the bitmap
 func (rb *Bitmap) Count() int {
+	if rb.count == 0 {
+		return 0
+	}
+
 	count := 0
-	for _, block := range rb.index {
+	for i := int(rb.span[0]); i <= int(rb.span[1]); i++ {
+		block := rb.blocks[i]
 		if block != nil {
-			for _, c := range block.containers {
+			for j := int(block.span[0]); j <= int(block.span[1]); j++ {
+				c := block.content[j]
 				if c != nil {
 					count += c.cardinality()
 				}
@@ -133,15 +238,24 @@ func (rb *Bitmap) Count() int {
 
 // Clear clears the bitmap and resizes it to zero.
 func (rb *Bitmap) Clear() {
-	rb.index = [256]*cblock{} // Clear all blocks
+	rb.blocks = [256]*cblock{} // Clear all blocks
+	rb.count = 0
+	rb.span[0] = 0
+	rb.span[1] = 0
 }
 
 // Optimize optimizes all containers to use the most efficient representation.
 // This can significantly reduce memory usage, especially after bulk operations.
 func (rb *Bitmap) Optimize() {
-	for _, block := range rb.index {
+	if rb.count == 0 {
+		return
+	}
+
+	for i := int(rb.span[0]); i <= int(rb.span[1]); i++ {
+		block := rb.blocks[i]
 		if block != nil {
-			for _, c := range block.containers {
+			for j := int(block.span[0]); j <= int(block.span[1]); j++ {
+				c := block.content[j]
 				if c != nil {
 					c.optimize()
 				}
