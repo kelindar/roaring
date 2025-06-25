@@ -1,6 +1,7 @@
 package roaring
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,260 @@ func TestRange(t *testing.T) {
 			assert.Equal(t, refValues, ourValues)
 		})
 	}
+}
+
+func TestFilter(t *testing.T) {
+	t.Run("filter_even_numbers", func(t *testing.T) {
+		rb := New()
+
+		// Add values 0-99
+		for i := 0; i < 100; i++ {
+			rb.Set(uint32(i))
+		}
+
+		// Filter to keep only even numbers
+		rb.Filter(func(x uint32) bool {
+			return x%2 == 0
+		})
+
+		// Verify only even numbers remain
+		assert.Equal(t, 50, rb.Count())
+		for i := 0; i < 100; i += 2 {
+			assert.True(t, rb.Contains(uint32(i)), "Even number %d should be present", i)
+		}
+		for i := 1; i < 100; i += 2 {
+			assert.False(t, rb.Contains(uint32(i)), "Odd number %d should be removed", i)
+		}
+	})
+
+	t.Run("filter_empty_bitmap", func(t *testing.T) {
+		rb := New()
+
+		// Filter empty bitmap - should not panic
+		rb.Filter(func(x uint32) bool {
+			return x%2 == 0
+		})
+
+		assert.Equal(t, 0, rb.Count())
+	})
+
+	t.Run("filter_all_pass", func(t *testing.T) {
+		rb := New()
+		values := []uint32{1, 5, 10, 100, 1000, 10000}
+
+		for _, v := range values {
+			rb.Set(v)
+		}
+
+		originalCount := rb.Count()
+
+		// Filter that passes everything
+		rb.Filter(func(x uint32) bool {
+			return true
+		})
+
+		// Nothing should be removed
+		assert.Equal(t, originalCount, rb.Count())
+		for _, v := range values {
+			assert.True(t, rb.Contains(v))
+		}
+	})
+
+	t.Run("filter_all_fail", func(t *testing.T) {
+		rb := New()
+		values := []uint32{1, 5, 10, 100, 1000, 10000}
+
+		for _, v := range values {
+			rb.Set(v)
+		}
+
+		// Filter that rejects everything
+		rb.Filter(func(x uint32) bool {
+			return false
+		})
+
+		// Everything should be removed
+		assert.Equal(t, 0, rb.Count())
+		for _, v := range values {
+			assert.False(t, rb.Contains(v))
+		}
+	})
+
+	t.Run("filter_range_predicate", func(t *testing.T) {
+		rb := New()
+
+		// Add values 0-199
+		for i := 0; i < 200; i++ {
+			rb.Set(uint32(i))
+		}
+
+		// Filter to keep only values in range [50, 150)
+		rb.Filter(func(x uint32) bool {
+			return x >= 50 && x < 150
+		})
+
+		// Verify correct range remains
+		assert.Equal(t, 100, rb.Count())
+		for i := 0; i < 50; i++ {
+			assert.False(t, rb.Contains(uint32(i)))
+		}
+		for i := 50; i < 150; i++ {
+			assert.True(t, rb.Contains(uint32(i)))
+		}
+		for i := 150; i < 200; i++ {
+			assert.False(t, rb.Contains(uint32(i)))
+		}
+	})
+
+	t.Run("filter_multiple_containers", func(t *testing.T) {
+		rb := New()
+
+		// Add values across multiple containers
+		values := []uint32{
+			100,    // Container 0
+			65636,  // Container 1
+			131172, // Container 2
+			196708, // Container 3
+		}
+
+		for _, v := range values {
+			rb.Set(v)
+		}
+
+		// Filter to keep only values > 100000
+		rb.Filter(func(x uint32) bool {
+			return x > 100000
+		})
+
+		// Verify correct values remain
+		assert.Equal(t, 2, rb.Count())
+		assert.False(t, rb.Contains(100))
+		assert.False(t, rb.Contains(65636))
+		assert.True(t, rb.Contains(131172))
+		assert.True(t, rb.Contains(196708))
+	})
+
+	t.Run("filter_with_optimization", func(t *testing.T) {
+		rb := New()
+
+		// Create array container
+		for i := 0; i < 10; i++ {
+			rb.Set(uint32(i))
+		}
+
+		// Create bitmap container
+		for i := 0; i < 5000; i++ {
+			rb.Set(uint32(100000 + i*2)) // Sparse pattern
+		}
+
+		// Create run container (consecutive values)
+		for i := 200000; i < 201000; i++ {
+			rb.Set(uint32(i))
+		}
+		rb.Optimize()
+
+		originalCount := rb.Count()
+
+		// Filter to keep values divisible by 5
+		rb.Filter(func(x uint32) bool {
+			return x%5 == 0
+		})
+
+		// Verify filtering worked across all container types
+		assert.True(t, rb.Count() < originalCount)
+
+		// Check some specific values
+		assert.True(t, rb.Contains(0))  // 0 % 5 == 0
+		assert.True(t, rb.Contains(5))  // 5 % 5 == 0
+		assert.False(t, rb.Contains(1)) // 1 % 5 != 0
+		assert.False(t, rb.Contains(3)) // 3 % 5 != 0
+
+		// Verify all remaining values pass the predicate
+		rb.Range(func(x uint32) {
+			assert.Equal(t, uint32(0), x%5, "Value %d should be divisible by 5", x)
+		})
+	})
+
+	t.Run("filter_boundary_values", func(t *testing.T) {
+		rb := New()
+
+		// Add boundary values
+		boundaries := []uint32{0, 65535, 65536, 131071, 131072, 4294967295}
+		for _, v := range boundaries {
+			rb.Set(v)
+		}
+
+		// Filter to keep only values >= 65536
+		rb.Filter(func(x uint32) bool {
+			return x >= 65536
+		})
+
+		// Verify correct boundaries remain
+		assert.False(t, rb.Contains(0))
+		assert.False(t, rb.Contains(65535))
+		assert.True(t, rb.Contains(65536))
+		assert.True(t, rb.Contains(131071))
+		assert.True(t, rb.Contains(131072))
+		assert.True(t, rb.Contains(4294967295))
+	})
+}
+
+func TestRangeAndFilterConsistency(t *testing.T) {
+	t.Run("range_after_filter", func(t *testing.T) {
+		rb := New()
+
+		// Add random values
+		original := []uint32{1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 100, 200, 300}
+		for _, v := range original {
+			rb.Set(v)
+		}
+
+		// Filter to keep only values > 10
+		rb.Filter(func(x uint32) bool {
+			return x > 10
+		})
+
+		// Use Range to collect remaining values
+		var remaining []uint32
+		rb.Range(func(x uint32) {
+			remaining = append(remaining, x)
+		})
+
+		// Sort both slices for comparison
+		sort.Slice(remaining, func(i, j int) bool { return remaining[i] < remaining[j] })
+
+		expected := []uint32{11, 13, 15, 17, 19, 100, 200, 300}
+		assert.Equal(t, expected, remaining)
+
+		// Verify Count matches Range results
+		assert.Equal(t, len(remaining), rb.Count())
+	})
+
+	t.Run("multiple_filters", func(t *testing.T) {
+		rb := New()
+
+		// Add values 1-100
+		for i := 1; i <= 100; i++ {
+			rb.Set(uint32(i))
+		}
+
+		// First filter: keep even numbers
+		rb.Filter(func(x uint32) bool {
+			return x%2 == 0
+		})
+
+		// Second filter: keep numbers divisible by 4
+		rb.Filter(func(x uint32) bool {
+			return x%4 == 0
+		})
+
+		// Should have numbers divisible by 4: 4, 8, 12, 16, ..., 100
+		assert.Equal(t, 25, rb.Count()) // 100/4 = 25
+
+		rb.Range(func(x uint32) {
+			assert.Equal(t, uint32(0), x%4, "Value %d should be divisible by 4", x)
+		})
+	})
 }
 
 func TestContainerTypes(t *testing.T) {

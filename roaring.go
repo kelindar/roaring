@@ -2,14 +2,15 @@ package roaring
 
 // cblock represents a block of containers for the two-level index
 type cblock struct {
-	content [256]*container // 256 slots for containers with same high 8 bits
 	cindex
+	content [256]*container // 256 slots for containers with same high 8 bits
 }
 
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	blocks [256]*cblock // Level 1: index by high 8 bits of container key
 	cindex
+	blocks  [256]*cblock // Level 1: index by high 8 bits of container key
+	scratch []uint32
 }
 
 // New creates a new empty roaring bitmap
