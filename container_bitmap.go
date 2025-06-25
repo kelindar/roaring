@@ -162,3 +162,11 @@ func (c *container) bmpToArr() {
 		idx++
 	})
 }
+
+// bmpRange calls fn for each value in the bitmap container
+func (c *container) bmpRange(fn func(uint16)) {
+	bmp := c.bmp()
+	bmp.Range(func(value uint32) {
+		fn(uint16(value))
+	})
+}

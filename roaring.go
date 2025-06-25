@@ -197,7 +197,44 @@ func (rb *Bitmap) Xor(other *Bitmap, extra ...*Bitmap) {
 
 // Range calls the given function for each value in the bitmap
 func (rb *Bitmap) Range(fn func(x uint32)) {
-	panic("not implemented")
+	for hi8 := 0; hi8 < 256; hi8++ {
+		block := rb.index[hi8]
+		if block == nil {
+			continue
+		}
+		for lo8 := 0; lo8 < 256; lo8++ {
+			c := block.containers[lo8]
+			if c == nil {
+				continue
+			}
+			
+			base := uint32(c.Key) << 16 // High 16 bits
+			
+			// Inline the container-specific range logic for better performance
+			switch c.Type {
+			case typeArray:
+				array := c.arr()
+				for _, value := range array {
+					fn(base | uint32(value))
+				}
+			case typeBitmap:
+				bmp := c.bmp()
+				bmp.Range(func(value uint32) {
+					fn(base | value)
+				})
+			case typeRun:
+				runs := c.run()
+				for _, r := range runs {
+					for i := r[0]; i <= r[1]; i++ {
+						fn(base | uint32(i))
+						if i == r[1] {
+							break // Prevent uint16 overflow when r[1] is 65535
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // Filter iterates over the bitmap elements and calls a predicate provided for each

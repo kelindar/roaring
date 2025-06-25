@@ -166,6 +166,14 @@ func (c *container) arrToRun() bool {
 	return false
 }
 
+// arrRange calls fn for each value in the array container
+func (c *container) arrRange(fn func(uint16)) {
+	array := c.arr()
+	for _, value := range array {
+		fn(value)
+	}
+}
+
 // arrToBmp converts this container from array to bitmap
 func (c *container) arrToBmp() {
 	src := c.arr()

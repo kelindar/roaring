@@ -237,3 +237,16 @@ func (c *container) runToBmp() {
 		}
 	}
 }
+
+// runRange calls fn for each value in the run container
+func (c *container) runRange(fn func(uint16)) {
+	runs := c.run()
+	for _, r := range runs {
+		for i := r[0]; i <= r[1]; i++ {
+			fn(i)
+			if i == r[1] {
+				break // Prevent uint16 overflow when r[1] is 65535
+			}
+		}
+	}
+}

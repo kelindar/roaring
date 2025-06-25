@@ -27,7 +27,53 @@ func BenchmarkOps(b *testing.B) {
 	})
 }
 
+func BenchmarkRange(b *testing.B) {
+	benchRangeAll(b, "range")
+}
+
 // ---------------------------------------- Benchmarking ----------------------------------------
+
+func benchRangeAll(b *testing.B, name string) {
+	for _, size := range []int{1000, 1000000} {
+		for _, shape := range []fnShape{dataSeq(size, 0), dataRand(size, uint32(size)), dataSparse(size), dataDense(size)} {
+			benchRange(b, fmt.Sprintf("%s-%d", name, size), shape)
+		}
+	}
+}
+
+// benchRange runs a benchmark for the Range operation
+func benchRange(b *testing.B, name string, gen fnShape) {
+	data, shape := gen()
+	our, ref := random(data)
+	
+	b.Run(fmt.Sprintf("%s-%s", name, shape), func(b *testing.B) {
+		// Measure reference implementation speed using Iterate
+		start := time.Now()
+		refIterations := 0
+		for time.Since(start) < time.Second {
+			ref.Iterate(func(uint32) bool { return true })
+			refIterations++
+		}
+		refTime := time.Since(start)
+		f0 := float64(refIterations) / refTime.Seconds()
+
+		// Measure our implementation speed
+		b.ResetTimer()
+		b.ReportAllocs()
+		start = time.Now()
+		ourIterations := 0
+		for time.Since(start) < time.Second {
+			our.Range(func(uint32) {})
+			ourIterations++
+		}
+		ourTime := time.Since(start)
+		f1 := float64(ourIterations) / ourTime.Seconds()
+
+		b.ReportMetric(1e9/(f1*float64(our.Count())), "ns/op")  // Per element
+		b.ReportMetric(f1*float64(our.Count())/1e6, "M/s")     // Elements per second
+		b.ReportMetric(f1/f0*100, "%")                         // Speedup
+	})
+}
 
 func benchAll(b *testing.B, name string, fn func(rb *Bitmap, v uint32), fnRef func(rb *roaring.Bitmap, v uint32)) {
 	for _, size := range []int{1000, 1000000} {
