@@ -102,14 +102,9 @@ func (c *container) contains(value uint16) bool {
 	return false
 }
 
-// cardinality returns the number of elements in the container
-func (c *container) cardinality() int {
-	return int(c.Size)
-}
-
 // isEmpty returns true if the container has no elements
 func (c *container) isEmpty() bool {
-	return c.cardinality() == 0
+	return c.Size == 0
 }
 
 // optimize converts the container to the most efficient representation

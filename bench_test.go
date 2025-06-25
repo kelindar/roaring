@@ -228,8 +228,8 @@ func benchAnd(b *testing.B, name string, gen fnShape) {
 		ourTime := time.Since(start)
 		f1 := float64(ourIterations) / ourTime.Seconds()
 
-		b.ReportMetric(1e9/f1, "ns/op") // Time per operation
-		b.ReportMetric(f1/1e6, "M/s")   // Operations per second (in millions)
-		b.ReportMetric(f1/f0*100, "%")  // Speedup ratio
+		b.N = ourIterations
+		b.ReportMetric(f1/1e6, "M/s")  // Operations per second (in millions)
+		b.ReportMetric(f1/f0*100, "%") // Speedup ratio
 	})
 }

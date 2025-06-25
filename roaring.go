@@ -58,15 +58,9 @@ func (rb *Bitmap) Contains(x uint32) bool {
 
 // Count returns the total number of bits set to 1 in the bitmap
 func (rb *Bitmap) Count() int {
-	if rb.blocks.isEmpty() {
-		return 0
-	}
-
 	count := 0
-	rb.blocks.iterate(func(hi8 uint8, cblk *cblock) {
-		cblk.iterate(func(lo8 uint8, c *container) {
-			count += c.cardinality()
-		})
+	rb.containers(func(base uint32, c *container) {
+		count += int(c.Size)
 	})
 	return count
 }
@@ -78,14 +72,8 @@ func (rb *Bitmap) Clear() {
 
 // Optimize optimizes all containers to use the most efficient representation
 func (rb *Bitmap) Optimize() {
-	if rb.blocks.isEmpty() {
-		return
-	}
-
-	rb.blocks.iterate(func(hi8 uint8, cblk *cblock) {
-		cblk.iterate(func(lo8 uint8, c *container) {
-			c.optimize()
-		})
+	rb.containers(func(base uint32, c *container) {
+		c.optimize()
 	})
 }
 
