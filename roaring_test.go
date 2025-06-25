@@ -227,135 +227,169 @@ func TestRange(t *testing.T) {
 	}
 }
 
-func TestRange_ArrayContainer(t *testing.T) {
-	our := New()
+func TestRange_ContainerTypes(t *testing.T) {
+	tests := []struct {
+		name         string
+		setup        func() (*Bitmap, []uint32)
+		containerIdx uint16
+		expectedType ctype
+		customCheck  func(*testing.T, []uint32, []uint32) // our, expected
+	}{
+		{
+			name: "array_container",
+			setup: func() (*Bitmap, []uint32) {
+				our := New()
+				values := []uint32{1, 5, 10, 100, 500, 1000}
+				for _, v := range values {
+					our.Set(v)
+				}
+				return our, values
+			},
+			containerIdx: 0,
+			expectedType: typeArray,
+		},
+		{
+			name: "bitmap_container",
+			setup: func() (*Bitmap, []uint32) {
+				our := New()
+				var values []uint32
+				for i := 0; i < 5000; i++ {
+					v := uint32(i * 3) // Sparse to prevent run optimization
+					our.Set(v)
+					values = append(values, v)
+				}
+				return our, values
+			},
+			containerIdx: 0,
+			expectedType: typeBitmap,
+		},
+		{
+			name: "run_container",
+			setup: func() (*Bitmap, []uint32) {
+				our := New()
+				for i := 1000; i <= 2000; i++ {
+					our.Set(uint32(i))
+				}
+				our.Optimize()
 
-	// Force array container by adding few sparse values
-	values := []uint32{1, 5, 10, 100, 500, 1000}
-	for _, v := range values {
-		our.Set(v)
+				var values []uint32
+				for i := 1000; i <= 2000; i++ {
+					values = append(values, uint32(i))
+				}
+				return our, values
+			},
+			containerIdx: 0,
+			expectedType: typeRun,
+		},
 	}
 
-	// Verify it's an array container
-	c, exists := our.findContainer(0)
-	assert.True(t, exists)
-	assert.Equal(t, typeArray, c.Type)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			our, expected := tt.setup()
 
-	// Test Range on array container
-	var result []uint32
-	our.Range(func(x uint32) {
-		result = append(result, x)
-	})
+			// Verify container type
+			c, exists := our.findContainer(tt.containerIdx)
+			assert.True(t, exists)
+			assert.Equal(t, tt.expectedType, c.Type)
 
-	assert.Equal(t, values, result)
+			// Test Range output
+			var result []uint32
+			our.Range(func(x uint32) {
+				result = append(result, x)
+			})
+
+			if tt.customCheck != nil {
+				tt.customCheck(t, result, expected)
+			} else {
+				assert.Equal(t, expected, result)
+			}
+		})
+	}
 }
 
-func TestRange_BitmapContainer(t *testing.T) {
-	rb := New()
+func TestRange_Reference(t *testing.T) {
+	tests := []struct {
+		name   string
+		setup  func(*Bitmap, *bitmap.Bitmap)
+		postOp func(*Bitmap, *bitmap.Bitmap) // Optional post-setup operations
+	}{
+		{
+			name: "multiple_containers",
+			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
+				// Container 0: array (few values)
+				arrayValues := []uint32{1, 5, 10}
 
-	// Force bitmap container by adding many sparse values to prevent run optimization
-	var expected []uint32
-	for i := 0; i < 5000; i++ {
-		v := uint32(i * 3) // Sparse values to prevent run container optimization
-		rb.Set(v)
-		expected = append(expected, v)
+				// Container 1: bitmap (many values)
+				var bitmapValues []uint32
+				for i := 0; i < 3000; i++ {
+					bitmapValues = append(bitmapValues, uint32(65536+i))
+				}
+
+				// Container 2: run (consecutive values)
+				var runValues []uint32
+				for i := 131072; i <= 131572; i++ {
+					runValues = append(runValues, uint32(i))
+				}
+
+				allValues := append(append(arrayValues, bitmapValues...), runValues...)
+				for _, v := range allValues {
+					our.Set(v)
+					ref.Set(v)
+				}
+			},
+			postOp: func(our *Bitmap, ref *bitmap.Bitmap) {
+				our.Optimize()
+			},
+		},
+		{
+			name: "random_data",
+			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
+				for i := 0; i < 1e4; i++ {
+					value := uint32(rand.IntN(100000))
+					our.Set(value)
+					ref.Set(value)
+				}
+			},
+		},
+		{
+			name: "boundary_values",
+			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
+				values := []uint32{0, 65535, 65536, 131071, 131072, 4294967295}
+				for _, v := range values {
+					our.Set(v)
+					ref.Set(v)
+				}
+			},
+		},
+		{
+			name: "sparse_large_range",
+			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
+				for i := 0; i < 1000; i++ {
+					v := uint32(i * 10000)
+					our.Set(v)
+					ref.Set(v)
+				}
+			},
+		},
 	}
 
-	// Verify it's a bitmap container
-	c, exists := rb.findContainer(0)
-	assert.True(t, exists)
-	assert.Equal(t, typeBitmap, c.Type)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			our := New()
+			var ref bitmap.Bitmap
 
-	// Test Range on bitmap container
-	var result []uint32
-	rb.Range(func(x uint32) {
-		result = append(result, x)
-	})
+			tt.setup(our, &ref)
 
-	assert.Equal(t, expected, result)
-}
+			if tt.postOp != nil {
+				tt.postOp(our, &ref)
+			}
 
-func TestRange_RunContainer(t *testing.T) {
-	our := New()
+			// Compare Range output
+			var ourValues, refValues []uint32
+			our.Range(func(x uint32) { ourValues = append(ourValues, x) })
+			ref.Range(func(x uint32) { refValues = append(refValues, x) })
 
-	// Create consecutive values and optimize to force run container
-	for i := 1000; i <= 2000; i++ {
-		our.Set(uint32(i))
+			assert.Equal(t, refValues, ourValues)
+		})
 	}
-	our.Optimize() // Force optimization to run container
-
-	// Verify it's a run container
-	c, exists := our.findContainer(0)
-	assert.True(t, exists)
-	assert.Equal(t, typeRun, c.Type)
-
-	// Test Range on run container
-	var result []uint32
-	our.Range(func(x uint32) {
-		result = append(result, x)
-	})
-
-	// Verify all consecutive values are present
-	assert.Equal(t, 1001, len(result))
-	for i, v := range result {
-		assert.Equal(t, uint32(1000+i), v)
-	}
-}
-
-func TestRange_MultipleContainers(t *testing.T) {
-	our := New()
-	var ref bitmap.Bitmap
-
-	// Create different container types in different containers
-	// Container 0: array (few values)
-	arrayValues := []uint32{1, 5, 10}
-
-	// Container 1: bitmap (many values)
-	var bitmapValues []uint32
-	for i := 0; i < 3000; i++ {
-		v := uint32(65536 + i)
-		bitmapValues = append(bitmapValues, v)
-	}
-
-	// Container 2: run (consecutive values)
-	var runValues []uint32
-	for i := 131072; i <= 131572; i++ {
-		runValues = append(runValues, uint32(i))
-	}
-
-	// Add all values to both bitmaps
-	allValues := append(append(arrayValues, bitmapValues...), runValues...)
-	for _, v := range allValues {
-		our.Set(v)
-		ref.Set(v)
-	}
-
-	// Optimize to ensure proper container types
-	our.Optimize()
-
-	// Compare Range output
-	var ourValues, refValues []uint32
-	our.Range(func(x uint32) { ourValues = append(ourValues, x) })
-	ref.Range(func(x uint32) { refValues = append(refValues, x) })
-
-	assert.Equal(t, refValues, ourValues)
-	assert.Equal(t, len(allValues), len(ourValues))
-}
-
-func TestRange_RandomData(t *testing.T) {
-	our := New()
-	var ref bitmap.Bitmap
-
-	// Generate random data and compare with reference
-	for i := 0; i < 1e4; i++ {
-		value := uint32(rand.IntN(100000))
-		our.Set(value)
-		ref.Set(value)
-	}
-
-	var ourValues, refValues []uint32
-	our.Range(func(x uint32) { ourValues = append(ourValues, x) })
-	ref.Range(func(x uint32) { refValues = append(refValues, x) })
-
-	assert.Equal(t, refValues, ourValues)
 }
