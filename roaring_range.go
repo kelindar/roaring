@@ -49,3 +49,10 @@ func (rb *Bitmap) Range(fn func(x uint32)) {
 		}
 	}
 }
+
+// Filter iterates over the bitmap elements and calls a predicate provided for each
+// containing element. If the predicate returns false, the bitmap at the element's
+// position is set to zero.
+func (rb *Bitmap) Filter(f func(x uint32) bool) {
+	panic("not implemented")
+}

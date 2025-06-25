@@ -1,9 +1,5 @@
 package roaring
 
-import (
-	"io"
-)
-
 // cblock represents a block of containers for the two-level index
 type cblock struct {
 	content [256]*container // 256 slots for containers with same high 8 bits
@@ -188,58 +184,6 @@ func (rb *Bitmap) Grow(desiredBit uint32) {
 
 // Clone clones the bitmap
 func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
-	panic("not implemented")
-}
-
-// And performs bitwise AND operation with other bitmap(s)
-func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
-}
-
-// AndNot performs bitwise AND NOT operation with other bitmap(s)
-func (rb *Bitmap) AndNot(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
-}
-
-// Or performs bitwise OR operation with other bitmap(s)
-func (rb *Bitmap) Or(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
-}
-
-// Xor performs bitwise XOR operation with other bitmap(s)
-func (rb *Bitmap) Xor(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
-}
-
-// Filter iterates over the bitmap elements and calls a predicate provided for each
-// containing element. If the predicate returns false, the bitmap at the element's
-// position is set to zero.
-func (rb *Bitmap) Filter(f func(x uint32) bool) {
-	panic("not implemented")
-}
-
-// ToBytes converts the bitmap to a byte slice
-func (rb *Bitmap) ToBytes() []byte {
-	panic("not implemented")
-}
-
-// WriteTo writes the bitmap to a writer
-func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
-	panic("not implemented")
-}
-
-// ReadFrom reads the bitmap from a reader
-func (rb *Bitmap) ReadFrom(r io.Reader) (int64, error) {
-	panic("not implemented")
-}
-
-// FromBytes creates a roaring bitmap from a byte buffer
-func FromBytes(buffer []byte) *Bitmap {
-	panic("not implemented")
-}
-
-// ReadFrom reads a roaring bitmap from an io.Reader
-func ReadFrom(r io.Reader) (*Bitmap, error) {
 	panic("not implemented")
 }
 
