@@ -2,14 +2,6 @@ package roaring
 
 import "unsafe"
 
-// max returns the maximum of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // run converts the container to a []run
 func (c *container) run() []run {
 	if len(c.Data) == 0 {
@@ -133,7 +125,7 @@ func (c *container) runInsertRunAt(index int, newRun run) {
 		// Extend slice without reallocation
 		c.Data = c.Data[:newCapacity]
 		newRuns := c.run()
-		
+
 		// Move existing runs to make space
 		if index < oldLen {
 			copy(newRuns[index+1:], runs[index:])
@@ -231,19 +223,6 @@ func (c *container) runToBmp() {
 	for _, r := range src {
 		for i := r[0]; i <= r[1]; i++ {
 			dst.Set(uint32(i))
-			if i == r[1] {
-				break // Prevent uint16 overflow when r[1] is 65535
-			}
-		}
-	}
-}
-
-// runRange calls fn for each value in the run container
-func (c *container) runRange(fn func(uint16)) {
-	runs := c.run()
-	for _, r := range runs {
-		for i := r[0]; i <= r[1]; i++ {
-			fn(i)
 			if i == r[1] {
 				break // Prevent uint16 overflow when r[1] is 65535
 			}
