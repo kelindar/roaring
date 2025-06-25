@@ -71,27 +71,3 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 		}
 	})
 }
-
-func (rb *Bitmap) containers(fn func(base uint32, c *container)) {
-	if rb.count == 0 {
-		return
-	}
-
-	// Iterate over blocks
-	for i := int(rb.span[0]); i <= int(rb.span[1]); i++ {
-		block := rb.blocks[i]
-		if block == nil {
-			continue
-		}
-
-		// Iterate over containers in block
-		for j := int(block.span[0]); j <= int(block.span[1]); j++ {
-			c := block.content[j]
-			if c == nil {
-				continue
-			}
-
-			fn(uint32(c.Key)<<16, c)
-		}
-	}
-}

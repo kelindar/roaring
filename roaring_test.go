@@ -110,7 +110,7 @@ func TestTransitions(t *testing.T) {
 				return rb
 			},
 			validate: func(t *testing.T, rb *Bitmap) {
-				c, exists := rb.findContainer(0)
+				c, exists := rb.ctrFind(0)
 				assert.True(t, exists)
 				assert.Equal(t, typeBitmap, c.Type)
 				assert.Equal(t, 5000, rb.Count())
@@ -128,7 +128,7 @@ func TestTransitions(t *testing.T) {
 				return rb
 			},
 			validate: func(t *testing.T, rb *Bitmap) {
-				c, exists := rb.findContainer(0)
+				c, exists := rb.ctrFind(0)
 				assert.True(t, exists)
 				assert.Equal(t, typeRun, c.Type)
 				assert.Equal(t, 60000, rb.Count())
@@ -177,15 +177,15 @@ func TestTransitions(t *testing.T) {
 			},
 			validate: func(t *testing.T, rb *Bitmap) {
 				// Verify we have containers
-				c0, exists := rb.findContainer(0)
+				c0, exists := rb.ctrFind(0)
 				assert.True(t, exists)
 				assert.Equal(t, typeArray, c0.Type)
 
-				c1, exists := rb.findContainer(1)
+				c1, exists := rb.ctrFind(1)
 				assert.True(t, exists)
 				assert.Equal(t, typeBitmap, c1.Type)
 
-				c2, exists := rb.findContainer(2)
+				c2, exists := rb.ctrFind(2)
 				assert.True(t, exists)
 				assert.Equal(t, typeRun, c2.Type)
 
@@ -213,7 +213,7 @@ func TestContainerConversions(t *testing.T) {
 		rb.Optimize()
 
 		// Verify it's bitmap initially
-		c, exists := rb.findContainer(0)
+		c, exists := rb.ctrFind(0)
 		assert.True(t, exists)
 		assert.Equal(t, typeBitmap, c.Type)
 
@@ -226,7 +226,7 @@ func TestContainerConversions(t *testing.T) {
 		rb.Optimize()
 
 		// Should now be array (or at least much smaller)
-		c, exists = rb.findContainer(0)
+		c, exists = rb.ctrFind(0)
 		assert.True(t, exists)
 		assert.Equal(t, 500, rb.Count())
 		// Should be array type since we reduced to small number of sparse values
@@ -247,7 +247,7 @@ func TestContainerConversions(t *testing.T) {
 		rb.Optimize()
 
 		// Verify it's run initially
-		c, exists := rb.findContainer(0)
+		c, exists := rb.ctrFind(0)
 		assert.True(t, exists)
 		assert.Equal(t, typeRun, c.Type)
 
@@ -259,7 +259,7 @@ func TestContainerConversions(t *testing.T) {
 		// Force optimization - should become array due to low average run length
 		rb.Optimize()
 
-		c, exists = rb.findContainer(0)
+		c, exists = rb.ctrFind(0)
 		assert.True(t, exists)
 		expectedCount := 501 // 1000, 1002, 1004, ..., 1998, 2000
 		assert.Equal(t, expectedCount, rb.Count())
@@ -300,9 +300,9 @@ func TestContainerEdgeCases(t *testing.T) {
 		assert.Equal(t, 0, rb.Count())
 
 		// Verify containers were removed
-		_, exists := rb.findContainer(0)
+		_, exists := rb.ctrFind(0)
 		assert.False(t, exists)
-		_, exists = rb.findContainer(1)
+		_, exists = rb.ctrFind(1)
 		assert.False(t, exists)
 	})
 
@@ -312,7 +312,7 @@ func TestContainerEdgeCases(t *testing.T) {
 		rb.Set(1)
 		rb.Set(5)
 
-		c, exists := rb.findContainer(0)
+		c, exists := rb.ctrFind(0)
 		assert.True(t, exists)
 
 		// Try to delete value that would be out of bounds
@@ -324,7 +324,7 @@ func TestContainerEdgeCases(t *testing.T) {
 		rb := New()
 		// Create run with single value
 		rb.Set(1000)
-		c, _ := rb.findContainer(0)
+		c, _ := rb.ctrFind(0)
 		c.Type = typeRun
 		c.Data = []uint16{1000, 1000} // Single value run
 		c.Size = 1
@@ -446,7 +446,7 @@ func TestContainerOptimization(t *testing.T) {
 		}
 
 		rb.Optimize()
-		c, exists := rb.findContainer(0)
+		c, exists := rb.ctrFind(0)
 		assert.True(t, exists)
 		assert.Equal(t, typeArray, c.Type)
 	})
@@ -459,7 +459,7 @@ func TestContainerOptimization(t *testing.T) {
 		}
 
 		rb.Optimize()
-		c, exists := rb.findContainer(0)
+		c, exists := rb.ctrFind(0)
 		assert.True(t, exists)
 		assert.Equal(t, typeBitmap, c.Type)
 	})
@@ -472,13 +472,13 @@ func TestContainerOptimization(t *testing.T) {
 		}
 
 		rb.Optimize()
-		c, exists := rb.findContainer(0)
+		c, exists := rb.ctrFind(0)
 		assert.True(t, exists)
 		assert.Equal(t, typeRun, c.Type)
 
 		// Optimize again - should still be run
 		rb.Optimize()
-		c, exists = rb.findContainer(0)
+		c, exists = rb.ctrFind(0)
 		assert.True(t, exists)
 		assert.Equal(t, typeRun, c.Type)
 	})
@@ -499,9 +499,9 @@ func TestCopyOnWrite(t *testing.T) {
 		assert.Equal(t, original.Count(), clone.Count())
 
 		// Verify they share the same underlying data initially
-		origContainer, exists := original.findContainer(0)
+		origContainer, exists := original.ctrFind(0)
 		assert.True(t, exists)
-		cloneContainer, exists := clone.findContainer(0)
+		cloneContainer, exists := clone.ctrFind(0)
 		assert.True(t, exists)
 
 		// Both should be marked as shared
@@ -521,8 +521,8 @@ func TestCopyOnWrite(t *testing.T) {
 
 		// Verify initial state
 		assert.Equal(t, original.Count(), clone.Count())
-		origContainer, _ := original.findContainer(0)
-		cloneContainer, _ := clone.findContainer(0)
+		origContainer, _ := original.ctrFind(0)
+		cloneContainer, _ := clone.ctrFind(0)
 		assert.True(t, origContainer.shared, "Original should be shared initially")
 		assert.True(t, cloneContainer.shared, "Clone should be shared initially")
 
@@ -563,10 +563,10 @@ func TestCopyOnWrite(t *testing.T) {
 		clone3 := clone1.Clone(nil)
 
 		// All should share data initially
-		origContainer, _ := original.findContainer(0)
-		clone1Container, _ := clone1.findContainer(0)
-		clone2Container, _ := clone2.findContainer(0)
-		clone3Container, _ := clone3.findContainer(0)
+		origContainer, _ := original.ctrFind(0)
+		clone1Container, _ := clone1.ctrFind(0)
+		clone2Container, _ := clone2.ctrFind(0)
+		clone3Container, _ := clone3.ctrFind(0)
 
 		assert.True(t, origContainer.shared)
 		assert.True(t, clone1Container.shared)
@@ -679,8 +679,8 @@ func TestCopyOnWriteAnd(t *testing.T) {
 		clone := original.Clone(nil)
 
 		// Verify initial sharing
-		origContainer, _ := original.findContainer(0)
-		cloneContainer, _ := clone.findContainer(0)
+		origContainer, _ := original.ctrFind(0)
+		cloneContainer, _ := clone.ctrFind(0)
 		assert.True(t, origContainer.shared)
 		assert.True(t, cloneContainer.shared)
 		assert.Equal(t, &origContainer.Data[0], &cloneContainer.Data[0])
@@ -773,8 +773,8 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		single.Set(42)
 		clone := single.Clone(nil)
 
-		origContainer, _ := single.findContainer(0)
-		cloneContainer, _ := clone.findContainer(0)
+		origContainer, _ := single.ctrFind(0)
+		cloneContainer, _ := clone.ctrFind(0)
 		assert.True(t, origContainer.shared)
 		assert.True(t, cloneContainer.shared)
 
@@ -811,11 +811,11 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		level4 := level3.Clone(nil)
 
 		// All should share data
-		rootContainer, _ := root.findContainer(0)
-		l1Container, _ := level1.findContainer(0)
-		l2Container, _ := level2.findContainer(0)
-		l3Container, _ := level3.findContainer(0)
-		l4Container, _ := level4.findContainer(0)
+		rootContainer, _ := root.ctrFind(0)
+		l1Container, _ := level1.ctrFind(0)
+		l2Container, _ := level2.ctrFind(0)
+		l3Container, _ := level3.ctrFind(0)
+		l4Container, _ := level4.ctrFind(0)
 
 		dataPtr := &rootContainer.Data[0]
 		assert.Equal(t, dataPtr, &l1Container.Data[0])
@@ -849,7 +849,7 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			rb.Set(uint32(i * 1000))
 		}
-		container, _ := rb.findContainer(0)
+		container, _ := rb.ctrFind(0)
 		assert.Equal(t, typeArray, container.Type)
 
 		clone := rb.Clone(nil)
@@ -860,11 +860,11 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		}
 		rb.Optimize()
 
-		container, _ = rb.findContainer(0)
+		container, _ = rb.ctrFind(0)
 		assert.Equal(t, typeBitmap, container.Type)
 
 		// Clone should still be array with original content
-		cloneContainer, _ := clone.findContainer(0)
+		cloneContainer, _ := clone.ctrFind(0)
 		assert.Equal(t, typeArray, cloneContainer.Type)
 		assert.Equal(t, 10, clone.Count())
 		assert.True(t, clone.Contains(5000))
@@ -884,11 +884,11 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		}
 
 		// All should share data initially
-		baseContainer, _ := base.findContainer(0)
+		baseContainer, _ := base.ctrFind(0)
 		baseDataPtr := &baseContainer.Data[0]
 
 		for i, clone := range clones {
-			container, exists := clone.findContainer(0)
+			container, exists := clone.ctrFind(0)
 			assert.True(t, exists, "Clone %d should have container", i)
 			assert.True(t, container.shared, "Clone %d should be shared", i)
 			assert.Equal(t, baseDataPtr, &container.Data[0], "Clone %d should share data", i)
@@ -901,7 +901,7 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 
 		// Only modified clones should break sharing
 		for i, clone := range clones {
-			container, _ := clone.findContainer(0)
+			container, _ := clone.ctrFind(0)
 			if i%5 == 0 {
 				assert.False(t, container.shared, "Modified clone %d should not be shared", i)
 				assert.True(t, clone.Contains(uint32(2000+i)), "Clone %d should contain new element", i)
@@ -919,13 +919,13 @@ func TestCopyOnWriteEdgeCases(t *testing.T) {
 		}
 
 		// Access container to increment Call count
-		container, _ := original.findContainer(0)
+		container, _ := original.ctrFind(0)
 		originalCall := container.Call
 		originalSize := container.Size
 		originalType := container.Type
 
 		clone := original.Clone(nil)
-		cloneContainer, _ := clone.findContainer(0)
+		cloneContainer, _ := clone.ctrFind(0)
 
 		// Metadata should be preserved in clone
 		assert.Equal(t, originalCall, cloneContainer.Call)

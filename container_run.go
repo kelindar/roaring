@@ -178,7 +178,7 @@ func (c *container) runOptimize() {
 	runDensity := float64(numRuns) / float64(c.Size)
 
 	switch {
-	case numRuns > 2048:
+	case numRuns > runMaxSize:
 		c.runToBmp()
 	case c.Size <= 4096 && runDensity > 0.5:
 		c.runToArray()

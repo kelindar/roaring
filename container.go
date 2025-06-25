@@ -3,6 +3,7 @@ package roaring
 const (
 	arrMinSize    = 2048
 	runMinSize    = 100
+	runMaxSize    = 2048
 	optimizeEvery = 2048
 )
 
@@ -26,33 +27,34 @@ type container struct {
 type run [2]uint16
 
 // cowEnsureOwned ensures the container owns its data before modification
-// If data is shared, creates a copy; otherwise does nothing
 func (c *container) cowEnsureOwned() {
 	if c.shared {
-		newData := make([]uint16, len(c.Data))
-		copy(newData, c.Data)
-		c.Data = newData
+		clone := make([]uint16, len(c.Data), cap(c.Data))
+		copy(clone, c.Data)
+		c.Data = clone
 		c.shared = false
 	}
 }
 
-// cowClone creates a shallow copy of the container with shared data
+// cowClone creates a copy-on-write clone of the container
 func (c *container) cowClone() *container {
 	clone := &container{
 		Key:    c.Key,
 		Type:   c.Type,
 		Call:   c.Call,
 		Size:   c.Size,
-		Data:   c.Data, // Share the data
-		shared: true,   // Mark as shared
+		shared: true,
 	}
-	c.shared = true // Original is now also shared
+
+	// Share the data slice initially (COW)
+	clone.Data = c.Data
+	c.shared = true // Mark original as shared too
 	return clone
 }
 
 // set sets a value in the container and returns true if the value was added (didn't exist before)
 func (c *container) set(value uint16) (ok bool) {
-	c.cowEnsureOwned() // Ensure we own the data before modifying
+	c.cowEnsureOwned()
 	switch c.Type {
 	case typeArray:
 		if ok = c.arrSet(value); ok {
