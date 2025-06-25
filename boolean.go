@@ -1,6 +1,8 @@
 package roaring
 
-import "math/bits"
+import (
+	"math/bits"
+)
 
 // And performs bitwise AND operation with other bitmap(s)
 func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
@@ -178,27 +180,27 @@ func (rb *Bitmap) andContainers(c1, c2 *container) bool {
 func (rb *Bitmap) andArrayArray(c1, c2 *container) bool {
 	arr1 := c1.arr()
 	arr2 := c2.arr()
-	result := arr1[:0] // Reuse slice for efficiency
+	if len(arr1) == 0 || len(arr2) == 0 {
+		return false
+	}
 
+	out := arr1[:0]
 	i, j := 0, 0
 	for i < len(arr1) && j < len(arr2) {
-		if arr1[i] < arr2[j] {
+		switch {
+		case arr1[i] == arr2[j]:
+			out = append(out, arr1[i])
 			i++
-		} else if arr1[i] > arr2[j] {
 			j++
-		} else {
-			result = append(result, arr1[i])
+		case arr1[i] < arr2[j]:
 			i++
+		case arr1[i] > arr2[j]:
 			j++
 		}
 	}
 
-	if len(result) == 0 {
-		return false
-	}
-
-	c1.Data = result
-	c1.Size = uint32(len(result))
+	c1.Data = out
+	c1.Size = uint32(len(out))
 	return true
 }
 
@@ -270,20 +272,27 @@ func (rb *Bitmap) andBitmapArray(c1, c2 *container) bool {
 func (rb *Bitmap) andBitmapBitmap(c1, c2 *container) bool {
 	bmp1 := c1.bmp()
 	bmp2 := c2.bmp()
+	if bmp1 == nil || bmp2 == nil {
+		return false
+	}
 
-	count := 0
+	// Ensure we process the shorter bitmap
 	minLen := len(bmp1)
 	if len(bmp2) < minLen {
 		minLen = len(bmp2)
 	}
 
-	// Process overlapping portion
+	count := 0
+	// Process word by word for better performance
 	for i := 0; i < minLen; i++ {
-		bmp1[i] &= bmp2[i]
-		count += bits.OnesCount64(bmp1[i])
+		word := bmp1[i] & bmp2[i]
+		bmp1[i] = word
+		if word != 0 {
+			count += bits.OnesCount64(word)
+		}
 	}
 
-	// Clear remaining portion if bmp1 is longer
+	// Clear remaining words in bmp1 if it's longer
 	for i := minLen; i < len(bmp1); i++ {
 		bmp1[i] = 0
 	}
