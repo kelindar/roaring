@@ -1,390 +1,152 @@
 package roaring
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"testing"
 
-	"github.com/kelindar/bitmap"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBasicOperations(t *testing.T) {
-	rb := New()
-
-	// Test empty bitmap
-	assert.Equal(t, 0, rb.Count())
-	assert.False(t, rb.Contains(42))
-
-	// Test basic Set and Contains
-	rb.Set(1)
-	rb.Set(100)
-	rb.Set(65536) // Different container
-
-	assert.True(t, rb.Contains(1))
-	assert.True(t, rb.Contains(100))
-	assert.True(t, rb.Contains(65536))
-	assert.False(t, rb.Contains(2))
-	assert.Equal(t, 3, rb.Count())
-
-	// Test Remove
-	rb.Remove(100)
-	assert.False(t, rb.Contains(100))
-	assert.Equal(t, 2, rb.Count())
-
-	// Test Clear
-	rb.Clear()
-	assert.Equal(t, 0, rb.Count())
-	assert.False(t, rb.Contains(1))
-}
-
-func TestTransitions(t *testing.T) {
-	const i0, i1 = 60000, 100000
-
-	// array -> bitmap
-	rb := New()
-	for i := 0; i < i0; i++ {
-		rb.Set(uint32(i))
-		assert.True(t, rb.Contains(uint32(i)))
-	}
-	assert.Equal(t, i0, rb.Count())
-
-	// bitmap -> run
-	rb.Optimize()
-	assert.Equal(t, i0, rb.Count())
-
-	// Expand the run
-	for i := i0; i < i1; i++ {
-		rb.Set(uint32(i))
-		assert.True(t, rb.Contains(uint32(i)))
-	}
-	assert.Equal(t, i1, rb.Count())
-
-	// Remove from a run
-	for i := i0; i < i1; i++ {
-		rb.Remove(uint32(i))
-		assert.False(t, rb.Contains(uint32(i)))
-	}
-	assert.Equal(t, i0, rb.Count())
-
-	for i := 0; i < i0; i += 2 {
-		rb.Remove(uint32(i))
-		assert.False(t, rb.Contains(uint32(i)))
-	}
-	assert.Equal(t, i0/2, rb.Count())
-}
-
-// TestMixedOperations covers various operation patterns in single test
-func TestMixedOperations(t *testing.T) {
-	testCases := [][]uint32{
-		{1, 2, 3},                     // Simple case
-		{0, 65535, 65536, 131071},     // Container boundaries
-		{100, 101, 102, 103, 104},     // Consecutive (run-friendly)
-		{1, 100, 1000, 10000, 100000}, // Sparse
-	}
-
-	for _, values := range testCases {
-		rb := New()
-
-		// Set all values
-		for _, v := range values {
-			rb.Set(v)
-		}
-
-		// Verify count and contains
-		assert.Equal(t, len(values), rb.Count())
-		for _, v := range values {
-			assert.True(t, rb.Contains(v))
-		}
-
-		// Test removal pattern
-		removed := 0
-		for i, v := range values {
-			if i%2 == 0 { // Remove every other value
-				rb.Remove(v)
-				removed++
-				assert.False(t, rb.Contains(v))
-			}
-		}
-
-		assert.Equal(t, len(values)-removed, rb.Count())
-	}
-}
-
-func TestRandomOperations(t *testing.T) {
-	rb := New()
-	var ref bitmap.Bitmap
-
-	for i := 0; i < 1e4; i++ {
-		value := uint32(rand.IntN(10000))
-		switch rand.IntN(10) {
-		case 0:
-			rb.Remove(value)
-			ref.Remove(value)
-		default:
-			rb.Set(value)
-			ref.Set(value)
-
-		}
-	}
-
-	assert.Equal(t, ref.Count(), rb.Count())
-	ref.Range(func(x uint32) {
-		assert.True(t, rb.Contains(x))
-	})
-}
-
-// TestEdgeCases covers boundary conditions and special values
-func TestEdgeCases(t *testing.T) {
-	rb := New()
-
-	// Test boundary values
-	rb.Set(0)          // Minimum value
-	rb.Set(65535)      // Container boundary
-	rb.Set(65536)      // Next container
-	rb.Set(4294967295) // Maximum uint32
-
-	assert.True(t, rb.Contains(0))
-	assert.True(t, rb.Contains(65535))
-	assert.True(t, rb.Contains(65536))
-	assert.True(t, rb.Contains(4294967295))
-	assert.Equal(t, 4, rb.Count())
-
-	// Test duplicate sets (should not increase count)
-	rb.Set(0)
-	assert.Equal(t, 4, rb.Count())
-
-	// Test removing non-existent value
-	rb.Remove(12345)
-	assert.Equal(t, 4, rb.Count())
-}
-
-// TestRunOperations specifically tests run container behavior
-func TestRunOperations(t *testing.T) {
-	rb := New()
-
-	// Create consecutive sequence (should form runs efficiently)
-	for i := 1000; i <= 1010; i++ {
-		rb.Set(uint32(i))
-	}
-
-	assert.Equal(t, 11, rb.Count())
-
-	// Verify all values in run
-	for i := 1000; i <= 1010; i++ {
-		assert.True(t, rb.Contains(uint32(i)))
-	}
-
-	// Test run extension
-	rb.Set(999)  // Extend backward
-	rb.Set(1011) // Extend forward
-	assert.Equal(t, 13, rb.Count())
-
-	// Test run splitting by removing middle value
-	rb.Remove(1005)
-	assert.Equal(t, 12, rb.Count())
-	assert.False(t, rb.Contains(1005))
-	assert.True(t, rb.Contains(1004))
-	assert.True(t, rb.Contains(1006))
-}
-
-func TestRange(t *testing.T) {
-	rb := New()
-	var ref bitmap.Bitmap
-
-	// Test empty bitmap
-	var values []uint32
-	rb.Range(func(x uint32) {
-		values = append(values, x)
-	})
-	assert.Empty(t, values)
-
-	// Test various patterns against reference implementation
-	testCases := [][]uint32{
-		{42},                                   // Single value
-		{1, 10, 100},                           // Multiple values same container
-		{1, 65536, 131072},                     // Multiple containers
-		{0, 65535, 65536, 4294967295},          // Container boundaries
-		{100, 101, 102, 103, 104},              // Consecutive values
-		{1, 100, 1000, 10000, 100000, 1000000}, // Sparse values
-	}
-
-	for _, testValues := range testCases {
-		rb.Clear()
-		ref.Clear()
-
-		// Set same values in both bitmaps
-		for _, v := range testValues {
-			rb.Set(v)
-			ref.Set(v)
-		}
-
-		// Compare Range output
-		var ourValues, refValues []uint32
-		rb.Range(func(x uint32) { ourValues = append(ourValues, x) })
-		ref.Range(func(x uint32) { refValues = append(refValues, x) })
-
-		assert.Equal(t, refValues, ourValues, "Range mismatch for values: %v", testValues)
-	}
-}
-
-func TestRange_ContainerTypes(t *testing.T) {
 	tests := []struct {
-		name         string
-		setup        func() (*Bitmap, []uint32)
-		containerIdx uint16
-		expectedType ctype
-		customCheck  func(*testing.T, []uint32, []uint32) // our, expected
+		name string
+		gen  dataGen
 	}{
-		{
-			name: "array_container",
-			setup: func() (*Bitmap, []uint32) {
-				our := New()
-				values := []uint32{1, 5, 10, 100, 500, 1000}
-				for _, v := range values {
-					our.Set(v)
-				}
-				return our, values
-			},
-			containerIdx: 0,
-			expectedType: typeArray,
-		},
-		{
-			name: "bitmap_container",
-			setup: func() (*Bitmap, []uint32) {
-				our := New()
-				var values []uint32
-				for i := 0; i < 5000; i++ {
-					v := uint32(i * 3) // Sparse to prevent run optimization
-					our.Set(v)
-					values = append(values, v)
-				}
-				return our, values
-			},
-			containerIdx: 0,
-			expectedType: typeBitmap,
-		},
-		{
-			name: "run_container",
-			setup: func() (*Bitmap, []uint32) {
-				our := New()
-				for i := 1000; i <= 2000; i++ {
-					our.Set(uint32(i))
-				}
-				our.Optimize()
-
-				var values []uint32
-				for i := 1000; i <= 2000; i++ {
-					values = append(values, uint32(i))
-				}
-				return our, values
-			},
-			containerIdx: 0,
-			expectedType: typeRun,
-		},
+		{"sequential", genSeq(100, 0)},
+		{"random", genRand(100, 10000)},
+		{"sparse", genSparse(50)},
+		{"boundary", genBoundary()},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			our, expected := tt.setup()
+			data, _ := tt.gen()
+			our, ref := testPair(data)
 
-			// Verify container type
-			c, exists := our.findContainer(tt.containerIdx)
-			assert.True(t, exists)
-			assert.Equal(t, tt.expectedType, c.Type)
+			// Test basic operations
+			assertEqualBitmaps(t, our, ref)
 
-			// Test Range output
-			var result []uint32
-			our.Range(func(x uint32) {
-				result = append(result, x)
-			})
-
-			if tt.customCheck != nil {
-				tt.customCheck(t, result, expected)
-			} else {
-				assert.Equal(t, expected, result)
+			// Test removal pattern
+			for i, v := range data {
+				if i%2 == 0 {
+					our.Remove(v)
+					ref.Remove(v)
+				}
 			}
+			assertEqualBitmaps(t, our, ref)
+
+			// Test clear
+			our.Clear()
+			ref.Clear()
+			assertEqualBitmaps(t, our, ref)
 		})
 	}
 }
 
-func TestRange_Reference(t *testing.T) {
+func TestContainerTypes(t *testing.T) {
 	tests := []struct {
-		name   string
-		setup  func(*Bitmap, *bitmap.Bitmap)
-		postOp func(*Bitmap, *bitmap.Bitmap) // Optional post-setup operations
+		name          string
+		containerType ctype
 	}{
-		{
-			name: "multiple_containers",
-			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
-				// Container 0: array (few values)
-				arrayValues := []uint32{1, 5, 10}
-
-				// Container 1: bitmap (many values)
-				var bitmapValues []uint32
-				for i := 0; i < 3000; i++ {
-					bitmapValues = append(bitmapValues, uint32(65536+i))
-				}
-
-				// Container 2: run (consecutive values)
-				var runValues []uint32
-				for i := 131072; i <= 131572; i++ {
-					runValues = append(runValues, uint32(i))
-				}
-
-				allValues := append(append(arrayValues, bitmapValues...), runValues...)
-				for _, v := range allValues {
-					our.Set(v)
-					ref.Set(v)
-				}
-			},
-			postOp: func(our *Bitmap, ref *bitmap.Bitmap) {
-				our.Optimize()
-			},
-		},
-		{
-			name: "random_data",
-			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
-				for i := 0; i < 1e4; i++ {
-					value := uint32(rand.IntN(100000))
-					our.Set(value)
-					ref.Set(value)
-				}
-			},
-		},
-		{
-			name: "boundary_values",
-			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
-				values := []uint32{0, 65535, 65536, 131071, 131072, 4294967295}
-				for _, v := range values {
-					our.Set(v)
-					ref.Set(v)
-				}
-			},
-		},
-		{
-			name: "sparse_large_range",
-			setup: func(our *Bitmap, ref *bitmap.Bitmap) {
-				for i := 0; i < 1000; i++ {
-					v := uint32(i * 10000)
-					our.Set(v)
-					ref.Set(v)
-				}
-			},
-		},
+		{"array", typeArray},
+		{"bitmap", typeBitmap},
+		{"run", typeRun},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			our := New()
-			var ref bitmap.Bitmap
+			our, values := changeType(tt.containerType)
 
-			tt.setup(our, &ref)
+			// Verify container type
+			c, exists := our.findContainer(0)
+			assert.True(t, exists)
+			assert.Equal(t, tt.containerType, c.Type)
 
-			if tt.postOp != nil {
-				tt.postOp(our, &ref)
+			// Test all operations work correctly
+			assert.Equal(t, len(values), our.Count())
+			for _, v := range values {
+				assert.True(t, our.Contains(v))
 			}
 
-			// Compare Range output
+			// Test Range
+			var result []uint32
+			our.Range(func(x uint32) { result = append(result, x) })
+			assert.Equal(t, values, result)
+		})
+	}
+}
+
+func TestOperationsComprehensive(t *testing.T) {
+	tests := []struct {
+		name string
+		gen  func(int) dataGen
+	}{
+		{"seq", func(size int) dataGen { return genSeq(size, 0) }},
+		{"rnd", func(size int) dataGen { return genRand(size, uint32(size*10)) }},
+		{"sps", func(size int) dataGen { return genSparse(size) }},
+		{"dns", func(size int) dataGen { return genDense(size) }},
+	}
+
+	sizes := []int{100, 1000, 10000}
+
+	for _, size := range sizes {
+		for _, tt := range tests {
+			gen := tt.gen(size)
+			data, _ := gen()
+
+			t.Run(fmt.Sprintf("%s_%d", tt.name, size), func(t *testing.T) {
+				our, ref := testPairRandom(data)
+
+				// Test with random 50% fill
+				assertEqualBitmaps(t, our, ref)
+
+				// Test optimize
+				our.Optimize()
+				assertEqualBitmaps(t, our, ref)
+
+				// Test more operations
+				for i := 0; i < len(data)/4; i++ {
+					v := data[rand.IntN(len(data))]
+					switch rand.IntN(3) {
+					case 0:
+						our.Set(v)
+						ref.Set(v)
+					case 1:
+						our.Remove(v)
+						ref.Remove(v)
+					case 2:
+						// Just check contains
+						assert.Equal(t, ref.Contains(v), our.Contains(v))
+					}
+				}
+				assertEqualBitmaps(t, our, ref)
+			})
+		}
+	}
+}
+
+func TestRange(t *testing.T) {
+	tests := []struct {
+		name string
+		gen  dataGen
+	}{
+		{"empty", func() ([]uint32, string) { return []uint32{}, "emp" }},
+		{"single", func() ([]uint32, string) { return []uint32{42}, "sgl" }},
+		{"sequential", genSeq(1000, 0)},
+		{"random", genRand(1000, 100000)},
+		{"sparse", genSparse(100)},
+		{"dense", genDense(1000)},
+		{"boundary", genBoundary()},
+		{"mixed", genMixed()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, _ := tt.gen()
+			our, ref := testPair(data)
+
+			// Test Range output matches reference
 			var ourValues, refValues []uint32
 			our.Range(func(x uint32) { ourValues = append(ourValues, x) })
 			ref.Range(func(x uint32) { refValues = append(refValues, x) })
@@ -392,4 +154,473 @@ func TestRange_Reference(t *testing.T) {
 			assert.Equal(t, refValues, ourValues)
 		})
 	}
+}
+
+func TestTransitions(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *Bitmap
+		validate func(*testing.T, *Bitmap)
+	}{
+		{
+			name: "array_to_bitmap",
+			setup: func() *Bitmap {
+				rb := New()
+				// Add many sparse values to force bitmap (not consecutive to avoid run)
+				for i := 0; i < 5000; i++ {
+					rb.Set(uint32(i * 3)) // Sparse values
+				}
+				return rb
+			},
+			validate: func(t *testing.T, rb *Bitmap) {
+				c, exists := rb.findContainer(0)
+				assert.True(t, exists)
+				assert.Equal(t, typeBitmap, c.Type)
+				assert.Equal(t, 5000, rb.Count())
+			},
+		},
+		{
+			name: "bitmap_to_run",
+			setup: func() *Bitmap {
+				rb := New()
+				// Create bitmap with consecutive values
+				for i := 0; i < 60000; i++ {
+					rb.Set(uint32(i))
+				}
+				rb.Optimize() // Should convert to run
+				return rb
+			},
+			validate: func(t *testing.T, rb *Bitmap) {
+				c, exists := rb.findContainer(0)
+				assert.True(t, exists)
+				assert.Equal(t, typeRun, c.Type)
+				assert.Equal(t, 60000, rb.Count())
+			},
+		},
+		{
+			name: "run_split",
+			setup: func() *Bitmap {
+				rb := New()
+				// Create run
+				for i := 1000; i <= 2000; i++ {
+					rb.Set(uint32(i))
+				}
+				rb.Optimize()
+				// Split the run by removing middle
+				rb.Remove(1500)
+				return rb
+			},
+			validate: func(t *testing.T, rb *Bitmap) {
+				assert.False(t, rb.Contains(1500))
+				assert.True(t, rb.Contains(1499))
+				assert.True(t, rb.Contains(1501))
+				assert.Equal(t, 1000, rb.Count()) // 1001 - 1
+			},
+		},
+		{
+			name: "multiple_containers",
+			setup: func() *Bitmap {
+				rb := New()
+				// Container 0: Array
+				rb.Set(1)
+				rb.Set(5)
+				rb.Set(10)
+
+				// Container 1: Bitmap
+				for i := 0; i < 3000; i++ {
+					rb.Set(uint32(65536 + i*2))
+				}
+
+				// Container 2: Run
+				for i := 131072; i <= 131572; i++ {
+					rb.Set(uint32(i))
+				}
+				rb.Optimize()
+				return rb
+			},
+			validate: func(t *testing.T, rb *Bitmap) {
+				// Verify we have containers
+				c0, exists := rb.findContainer(0)
+				assert.True(t, exists)
+				assert.Equal(t, typeArray, c0.Type)
+
+				c1, exists := rb.findContainer(1)
+				assert.True(t, exists)
+				assert.Equal(t, typeBitmap, c1.Type)
+
+				c2, exists := rb.findContainer(2)
+				assert.True(t, exists)
+				assert.Equal(t, typeRun, c2.Type)
+
+				assert.Equal(t, 3504, rb.Count()) // 3 + 3000 + 501
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rb := tt.setup()
+			tt.validate(t, rb)
+		})
+	}
+}
+
+func TestContainerConversions(t *testing.T) {
+	t.Run("bitmap_to_array", func(t *testing.T) {
+		rb := New()
+		// Create bitmap with many values, then remove most to trigger array conversion
+		for i := 0; i < 5000; i++ {
+			rb.Set(uint32(i * 3))
+		}
+		// Force optimization to make sure it becomes bitmap
+		rb.Optimize()
+
+		// Verify it's bitmap initially
+		c, exists := rb.findContainer(0)
+		assert.True(t, exists)
+		assert.Equal(t, typeBitmap, c.Type)
+
+		// Remove most values to trigger bitmap->array conversion
+		for i := 500; i < 5000; i++ {
+			rb.Remove(uint32(i * 3))
+		}
+
+		// Force optimization to trigger conversion
+		rb.Optimize()
+
+		// Should now be array (or at least much smaller)
+		c, exists = rb.findContainer(0)
+		assert.True(t, exists)
+		assert.Equal(t, 500, rb.Count())
+		// Should be array type since we reduced to small number of sparse values
+		assert.Equal(t, typeArray, c.Type)
+
+		// Verify remaining values are correct
+		for i := 0; i < 500; i++ {
+			assert.True(t, rb.Contains(uint32(i*3)))
+		}
+	})
+
+	t.Run("run_to_array", func(t *testing.T) {
+		rb := New()
+		// Create run container with many consecutive values to ensure it becomes run
+		for i := 1000; i <= 2000; i++ {
+			rb.Set(uint32(i))
+		}
+		rb.Optimize()
+
+		// Verify it's run initially
+		c, exists := rb.findContainer(0)
+		assert.True(t, exists)
+		assert.Equal(t, typeRun, c.Type)
+
+		// Remove values to create many single-value runs (avgRunLength < 2.0)
+		for i := 1001; i <= 1999; i += 2 {
+			rb.Remove(uint32(i))
+		}
+
+		// Force optimization - should become array due to low average run length
+		rb.Optimize()
+
+		c, exists = rb.findContainer(0)
+		assert.True(t, exists)
+		expectedCount := 501 // 1000, 1002, 1004, ..., 1998, 2000
+		assert.Equal(t, expectedCount, rb.Count())
+		// Should be array type since average run length is now 1.0
+		assert.Equal(t, typeArray, c.Type)
+
+		// Verify correct values remain
+		for i := 1000; i <= 2000; i += 2 {
+			assert.True(t, rb.Contains(uint32(i)))
+		}
+	})
+}
+
+func TestContainerEdgeCases(t *testing.T) {
+	t.Run("empty_containers", func(t *testing.T) {
+		// Test with empty bitmap container
+		c := &container{Type: typeBitmap, Size: 0, Data: make([]uint16, 0)}
+
+		// Test bmp() with empty data
+		bmp := c.bmp()
+		assert.Nil(t, bmp)
+
+		// Test run() with empty data
+		c.Type = typeRun
+		runs := c.run()
+		assert.Nil(t, runs)
+	})
+
+	t.Run("container_removal_edge_cases", func(t *testing.T) {
+		rb := New()
+		rb.Set(65535) // Last value in container 0
+		rb.Set(65536) // First value in container 1
+
+		// Remove and verify container cleanup
+		rb.Remove(65535)
+		rb.Remove(65536)
+
+		assert.Equal(t, 0, rb.Count())
+
+		// Verify containers were removed
+		_, exists := rb.findContainer(0)
+		assert.False(t, exists)
+		_, exists = rb.findContainer(1)
+		assert.False(t, exists)
+	})
+
+	t.Run("bitmap_del_out_of_bounds", func(t *testing.T) {
+		rb := New()
+		// Create small bitmap
+		rb.Set(1)
+		rb.Set(5)
+
+		c, exists := rb.findContainer(0)
+		assert.True(t, exists)
+
+		// Try to delete value that would be out of bounds
+		deleted := c.bmpDel(65000) // Way beyond the bitmap size
+		assert.False(t, deleted)
+	})
+
+	t.Run("run_remove_edge_cases", func(t *testing.T) {
+		rb := New()
+		// Create run with single value
+		rb.Set(1000)
+		c, _ := rb.findContainer(0)
+		c.Type = typeRun
+		c.Data = []uint16{1000, 1000} // Single value run
+		c.Size = 1
+
+		// Remove the only value - should remove the run
+		removed := c.runDel(1000)
+		assert.True(t, removed)
+		assert.Equal(t, uint32(0), c.Size)
+
+		// Test removing from invalid index (this tests runRemoveRunAt edge case)
+		c.runRemoveRunAt(10) // Invalid index - should not panic
+	})
+}
+
+func TestEdgeCases(t *testing.T) {
+	t.Run("empty_operations", func(t *testing.T) {
+		rb := New()
+		assert.Equal(t, 0, rb.Count())
+		assert.False(t, rb.Contains(0))
+		rb.Remove(123) // Should not panic
+		assert.Equal(t, 0, rb.Count())
+
+		var values []uint32
+		rb.Range(func(x uint32) { values = append(values, x) })
+		assert.Empty(t, values)
+	})
+
+	t.Run("single_value_operations", func(t *testing.T) {
+		rb := New()
+		rb.Set(42)
+		assert.Equal(t, 1, rb.Count())
+		assert.True(t, rb.Contains(42))
+		assert.False(t, rb.Contains(41))
+
+		rb.Set(42) // Duplicate set
+		assert.Equal(t, 1, rb.Count())
+
+		rb.Remove(42)
+		assert.Equal(t, 0, rb.Count())
+		assert.False(t, rb.Contains(42))
+	})
+
+	t.Run("boundary_values", func(t *testing.T) {
+		rb := New()
+		boundaries := []uint32{0, 65535, 65536, 131071, 131072, 4294967295}
+
+		for _, v := range boundaries {
+			rb.Set(v)
+			assert.True(t, rb.Contains(v))
+		}
+		assert.Equal(t, len(boundaries), rb.Count())
+
+		// Test range maintains order
+		var result []uint32
+		rb.Range(func(x uint32) { result = append(result, x) })
+		assert.Equal(t, boundaries, result)
+	})
+
+	t.Run("container_boundaries", func(t *testing.T) {
+		rb := New()
+		// Test values right at container boundaries
+		testValues := []uint32{
+			65535, 65536, 65537, // Container 0-1 boundary
+			131071, 131072, 131073, // Container 1-2 boundary
+			196607, 196608, 196609, // Container 2-3 boundary
+		}
+
+		for _, v := range testValues {
+			rb.Set(v)
+		}
+
+		for _, v := range testValues {
+			assert.True(t, rb.Contains(v), "Value %d should be present", v)
+		}
+
+		// Remove every other value
+		for i, v := range testValues {
+			if i%2 == 0 {
+				rb.Remove(v)
+			}
+		}
+
+		for i, v := range testValues {
+			if i%2 == 0 {
+				assert.False(t, rb.Contains(v), "Value %d should be removed", v)
+			} else {
+				assert.True(t, rb.Contains(v), "Value %d should still be present", v)
+			}
+		}
+	})
+}
+
+func TestStress(t *testing.T) {
+	t.Run("large_sequential", func(t *testing.T) {
+		rb := New()
+		size := 100000
+
+		// Add sequential values
+		for i := 0; i < size; i++ {
+			rb.Set(uint32(i))
+		}
+		assert.Equal(t, size, rb.Count())
+
+		// Optimize (should become run containers)
+		rb.Optimize()
+		assert.Equal(t, size, rb.Count())
+
+		// Verify all values present
+		for i := 0; i < size; i++ {
+			assert.True(t, rb.Contains(uint32(i)))
+		}
+
+		// Remove every 10th value
+		removed := 0
+		for i := 0; i < size; i += 10 {
+			rb.Remove(uint32(i))
+			removed++
+		}
+		assert.Equal(t, size-removed, rb.Count())
+	})
+
+	t.Run("large_random", func(t *testing.T) {
+		rb := New()
+		var ref []uint32
+
+		// Add random values
+		for i := 0; i < 10000; i++ {
+			v := uint32(rand.IntN(1000000))
+			if !rb.Contains(v) {
+				rb.Set(v)
+				ref = append(ref, v)
+			}
+		}
+
+		// Verify count
+		assert.Equal(t, len(ref), rb.Count())
+
+		// Verify all values
+		for _, v := range ref {
+			assert.True(t, rb.Contains(v))
+		}
+
+		// Test optimize doesn't break anything
+		rb.Optimize()
+		assert.Equal(t, len(ref), rb.Count())
+		for _, v := range ref {
+			assert.True(t, rb.Contains(v))
+		}
+	})
+
+	t.Run("container_splits", func(t *testing.T) {
+		rb := New()
+
+		// Create runs that will be split
+		for container := 0; container < 5; container++ {
+			base := uint32(container * 65536)
+			// Add consecutive values
+			for i := 1000; i <= 2000; i++ {
+				rb.Set(base + uint32(i))
+			}
+		}
+		rb.Optimize()
+
+		initialCount := rb.Count()
+
+		// Split each run by removing middle values
+		for container := 0; container < 5; container++ {
+			base := uint32(container * 65536)
+			for i := 1400; i <= 1600; i++ {
+				rb.Remove(base + uint32(i))
+			}
+		}
+
+		expectedRemoved := 5 * 201 // 5 containers × 201 values each
+		assert.Equal(t, initialCount-expectedRemoved, rb.Count())
+
+		// Verify the boundaries are intact
+		for container := 0; container < 5; container++ {
+			base := uint32(container * 65536)
+			assert.True(t, rb.Contains(base+1000))
+			assert.True(t, rb.Contains(base+1399))
+			assert.False(t, rb.Contains(base+1400))
+			assert.False(t, rb.Contains(base+1600))
+			assert.True(t, rb.Contains(base+1601))
+			assert.True(t, rb.Contains(base+2000))
+		}
+	})
+}
+
+func TestContainerOptimization(t *testing.T) {
+	t.Run("array_stays_array", func(t *testing.T) {
+		rb := New()
+		// Add few sparse values that should stay as array
+		values := []uint32{1, 100, 1000, 10000, 50000}
+		for _, v := range values {
+			rb.Set(v)
+		}
+
+		rb.Optimize()
+		c, exists := rb.findContainer(0)
+		assert.True(t, exists)
+		assert.Equal(t, typeArray, c.Type)
+	})
+
+	t.Run("bitmap_stays_bitmap", func(t *testing.T) {
+		rb := New()
+		// Add many sparse values that should stay as bitmap
+		for i := 0; i < 10000; i++ {
+			rb.Set(uint32(i * 5)) // Every 5th value
+		}
+
+		rb.Optimize()
+		c, exists := rb.findContainer(0)
+		assert.True(t, exists)
+		assert.Equal(t, typeBitmap, c.Type)
+	})
+
+	t.Run("run_stays_run", func(t *testing.T) {
+		rb := New()
+		// Add consecutive values that should become/stay run
+		for i := 5000; i <= 15000; i++ {
+			rb.Set(uint32(i))
+		}
+
+		rb.Optimize()
+		c, exists := rb.findContainer(0)
+		assert.True(t, exists)
+		assert.Equal(t, typeRun, c.Type)
+
+		// Optimize again - should still be run
+		rb.Optimize()
+		c, exists = rb.findContainer(0)
+		assert.True(t, exists)
+		assert.Equal(t, typeRun, c.Type)
+	})
 }
