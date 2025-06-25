@@ -197,17 +197,15 @@ func dataDense(size int) fnShape {
 // benchAnd runs a benchmark for the And operation
 func benchAnd(b *testing.B, name string, gen fnShape) {
 	data, shape := gen()
-	our1, ref1 := random(data)
-	our2, ref2 := random(data)
+	our, ref := random(data)
 
 	b.Run(fmt.Sprintf("%s-%s", name, shape), func(b *testing.B) {
 		// Measure reference implementation speed
 		start := time.Now()
 		refIterations := 0
 		for time.Since(start) < time.Second {
-			refClone1 := ref1.Clone()
-			refClone2 := ref2.Clone()
-			refClone1.And(refClone2)
+			refDst := ref.Clone()
+			refDst.And(ref)
 			refIterations++
 		}
 		refTime := time.Since(start)
@@ -220,16 +218,14 @@ func benchAnd(b *testing.B, name string, gen fnShape) {
 
 		ourIterations := 0
 		for time.Since(start) < time.Second {
-			ourClone1 := our1.Clone(nil)
-			ourClone2 := our2.Clone(nil)
-			ourClone1.And(ourClone2)
+			ourClone1 := our.Clone(nil)
+			ourClone1.And(our)
 			ourIterations++
 		}
 		ourTime := time.Since(start)
 		f1 := float64(ourIterations) / ourTime.Seconds()
 
 		b.N = ourIterations
-		b.ReportMetric(f1/1e6, "M/s")  // Operations per second (in millions)
 		b.ReportMetric(f1/f0*100, "%") // Speedup ratio
 	})
 }
