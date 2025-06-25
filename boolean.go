@@ -58,8 +58,13 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 		return
 	}
 
-	// Track containers that become empty for batch removal
-	emptyContainers := make([]uint16, 0, 8)
+	// Pre-allocate emptyContainers with better capacity estimation
+	// Most containers will likely survive the AND operation, estimate conservatively
+	maxPossibleEmpty := int(rb.count)
+	if maxPossibleEmpty > 64 {
+		maxPossibleEmpty = 64 // Cap to reasonable limit
+	}
+	emptyContainers := make([]uint16, 0, maxPossibleEmpty)
 
 	// Process only intersecting containers
 	for i := int(minStart); i <= int(minEnd); i++ {
@@ -184,15 +189,17 @@ func (rb *Bitmap) andArrayArray(c1, c2 *container) bool {
 	arr1 := c1.arr()
 	arr2 := c2.arr()
 	if len(arr1) == 0 || len(arr2) == 0 {
+		c1.Size = 0
 		return false
 	}
 
-	out := arr1[:0]
+	// Create temporary result to avoid overwriting source array
+	result := make([]uint16, 0, len(arr1))
 	i, j := 0, 0
 	for i < len(arr1) && j < len(arr2) {
 		switch {
 		case arr1[i] == arr2[j]:
-			out = append(out, arr1[i])
+			result = append(result, arr1[i])
 			i++
 			j++
 		case arr1[i] < arr2[j]:
@@ -202,16 +209,18 @@ func (rb *Bitmap) andArrayArray(c1, c2 *container) bool {
 		}
 	}
 
-	c1.Data = out
-	c1.Size = uint32(len(out))
-	return true
+	c1.Data = result
+	c1.Size = uint32(len(result))
+	return len(result) > 0
 }
 
 // andArrayBitmap performs AND between array and bitmap containers
 func (rb *Bitmap) andArrayBitmap(c1, c2 *container) bool {
 	arr := c1.arr()
 	bmp := c2.bmp()
-	result := arr[:0]
+	
+	// Create a temporary result array to avoid overwriting the source array
+	result := make([]uint16, 0, len(arr))
 
 	for _, val := range arr {
 		if bmp.Contains(uint32(val)) {
@@ -219,55 +228,35 @@ func (rb *Bitmap) andArrayBitmap(c1, c2 *container) bool {
 		}
 	}
 
-	if len(result) == 0 {
-		return false
-	}
-
+	// Replace the data
 	c1.Data = result
 	c1.Size = uint32(len(result))
-	return true
+	return len(result) > 0
 }
 
 // andBitmapArray performs AND between bitmap and array containers
 func (rb *Bitmap) andBitmapArray(c1, c2 *container) bool {
-	// Convert bitmap to array with only intersecting values
-	bmp := c1.bmp()
+	originalBmp := c1.bmp()
 	arr := c2.arr()
 
-	// Save original bitmap state before clearing
-	original := make([]uint64, len(bmp))
-	copy(original, bmp)
-
-	// Clear bitmap first
-	for i := range bmp {
-		bmp[i] = 0
-	}
-
-	count := 0
+	// Create intersection array directly - more efficient than bitmap operations
+	result := make([]uint16, 0, len(arr))
+	
 	for _, val := range arr {
-		// Check against original bitmap state
-		blkIdx := val >> 6
-		bitIdx := val & 63
-		if int(blkIdx) < len(original) {
-			if original[blkIdx]&(uint64(1)<<bitIdx) != 0 {
-				// Set bit in cleared bitmap
-				bmp[blkIdx] |= uint64(1) << bitIdx
-				count++
-			}
+		if originalBmp.Contains(uint32(val)) {
+			result = append(result, val)
 		}
 	}
 
-	if count == 0 {
+	if len(result) == 0 {
+		c1.Size = 0
 		return false
 	}
 
-	c1.Size = uint32(count)
-
-	// Convert to array if small enough
-	if count <= arrMinSize {
-		rb.bitmapToArray(c1)
-	}
-
+	// Convert container to array type for efficiency
+	c1.Data = result
+	c1.Type = typeArray
+	c1.Size = uint32(len(result))
 	return true
 }
 
@@ -276,6 +265,7 @@ func (rb *Bitmap) andBitmapBitmap(c1, c2 *container) bool {
 	bmp1 := c1.bmp()
 	bmp2 := c2.bmp()
 	if bmp1 == nil || bmp2 == nil {
+		c1.Size = 0
 		return false
 	}
 
@@ -300,13 +290,13 @@ func (rb *Bitmap) andBitmapBitmap(c1, c2 *container) bool {
 		bmp1[i] = 0
 	}
 
+	c1.Size = uint32(count)
+
 	if count == 0 {
 		return false
 	}
 
-	c1.Size = uint32(count)
-
-	// Convert to array if small enough
+	// Convert to array if small enough for better space efficiency
 	if count <= arrMinSize {
 		rb.bitmapToArray(c1)
 	}
@@ -317,6 +307,7 @@ func (rb *Bitmap) andBitmapBitmap(c1, c2 *container) bool {
 // andRunContainer performs AND between run container and other container
 func (rb *Bitmap) andRunContainer(c1, c2 *container) bool {
 	runs := c1.run()
+	// Pre-allocate with reasonable capacity to avoid growth
 	newRuns := make([]run, 0, len(runs))
 
 	for _, r := range runs {
@@ -349,11 +340,17 @@ func (rb *Bitmap) andRunContainer(c1, c2 *container) bool {
 	}
 
 	if len(newRuns) == 0 {
+		c1.Size = 0
 		return false
 	}
 
-	// Update container
-	c1.Data = make([]uint16, len(newRuns)*2)
+	// Reuse existing data slice if possible
+	if cap(c1.Data) >= len(newRuns)*2 {
+		c1.Data = c1.Data[:len(newRuns)*2]
+	} else {
+		c1.Data = make([]uint16, len(newRuns)*2)
+	}
+	
 	newRunsSlice := c1.run()
 	copy(newRunsSlice, newRuns)
 
@@ -373,7 +370,7 @@ func (rb *Bitmap) andContainerRun(c1, c2 *container) bool {
 	switch c1.Type {
 	case typeArray:
 		arr := c1.arr()
-		result := arr[:0]
+		result := make([]uint16, 0, len(arr)) // Create new slice to avoid corruption
 
 		for _, val := range arr {
 			// Check if value is in any run
@@ -385,28 +382,24 @@ func (rb *Bitmap) andContainerRun(c1, c2 *container) bool {
 			}
 		}
 
-		if len(result) == 0 {
-			return false
-		}
-
 		c1.Data = result
 		c1.Size = uint32(len(result))
-		return true
+		return len(result) > 0
 
 	case typeBitmap:
 		bmp := c1.bmp()
-
-		// Save original bitmap state before clearing
+		
+		// Create a copy to check original values, then clear the original
 		original := make([]uint64, len(bmp))
 		copy(original, bmp)
-
+		
 		// Clear bitmap
 		for i := range bmp {
 			bmp[i] = 0
 		}
 
 		count := 0
-		// Set bits only for values in runs
+		// Set bits for intersecting values
 		for _, r := range runs {
 			for val := r[0]; val <= r[1]; val++ {
 				blkIdx := val >> 6
@@ -423,12 +416,8 @@ func (rb *Bitmap) andContainerRun(c1, c2 *container) bool {
 			}
 		}
 
-		if count == 0 {
-			return false
-		}
-
 		c1.Size = uint32(count)
-		return true
+		return count > 0
 	}
 
 	return false
