@@ -185,7 +185,52 @@ func (rb *Bitmap) Grow(desiredBit uint32) {
 
 // Clone clones the bitmap
 func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
-	panic("not implemented")
+	if into == nil {
+		into = &Bitmap{}
+	}
+
+	// Copy top-level index
+	into.cindex = rb.cindex
+	into.blocks = [256]*cblock{}
+
+	// Copy blocks and containers
+	for i := int(rb.span[0]); i <= int(rb.span[1]); i++ {
+		block := rb.blocks[i]
+		if block == nil {
+			continue
+		}
+
+		// Create new block
+		newBlock := &cblock{cindex: block.cindex}
+		into.blocks[i] = newBlock
+
+		// Copy containers
+		for j := int(block.span[0]); j <= int(block.span[1]); j++ {
+			c := block.content[j]
+			if c == nil {
+				continue
+			}
+
+			// Clone container
+			newContainer := &container{
+				Key:  c.Key,
+				Type: c.Type,
+				Call: c.Call,
+				Size: c.Size,
+				Data: make([]uint16, len(c.Data)),
+			}
+			copy(newContainer.Data, c.Data)
+			newBlock.content[j] = newContainer
+		}
+	}
+
+	// Clone scratch buffer if it exists
+	if len(rb.scratch) > 0 {
+		into.scratch = make([]uint32, len(rb.scratch))
+		copy(into.scratch, rb.scratch)
+	}
+
+	return into
 }
 
 // ---------------------------------------- Index ----------------------------------------
