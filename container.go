@@ -16,9 +16,8 @@ const (
 )
 
 type container struct {
-	Type   ctype // Type of the container
-	Shared bool  // COW: true if data is shared between containers
-	Key    uint16
+	Type   ctype  // Type of the container
+	Shared bool   // COW: true if data is shared between containers
 	Call   uint16 // Call count
 	Size   uint32 // Cardinality
 	Data   []uint16
@@ -40,7 +39,6 @@ func (c *container) cowEnsureOwned() {
 func (c *container) cowClone() *container {
 	clone := &container{
 		Type:   c.Type,
-		Key:    c.Key,
 		Call:   c.Call,
 		Size:   c.Size,
 		Data:   c.Data,

@@ -4,7 +4,7 @@ package roaring
 func (rb *Bitmap) Range(fn func(x uint32)) {
 	for i := range rb.containers {
 		c := &rb.containers[i]
-		base := uint32(c.Key) << 16
+		base := uint32(rb.index[i]) << 16
 
 		switch c.Type {
 		case typeArray:
@@ -42,7 +42,7 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 
 	for i := range rb.containers {
 		c := &rb.containers[i]
-		base := uint32(c.Key) << 16
+		base := uint32(rb.index[i]) << 16
 
 		switch c.Type {
 		case typeArray:

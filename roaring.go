@@ -18,7 +18,6 @@ func (rb *Bitmap) Set(x uint32) {
 	idx, exists := rb.ctrFind(hi)
 	if !exists {
 		rb.ctrAdd(hi, idx, &container{
-			Key:  hi,
 			Type: typeArray,
 			Size: 0,
 			Data: make([]uint16, 0, 64),
@@ -86,7 +85,6 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 		// Mark original as shared and copy with shared data
 		rb.containers[i].Shared = true
 		into.containers[i] = container{
-			Key:    rb.containers[i].Key,
 			Type:   rb.containers[i].Type,
 			Call:   rb.containers[i].Call,
 			Size:   rb.containers[i].Size,

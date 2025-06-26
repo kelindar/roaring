@@ -60,7 +60,7 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 	// Iterate through all containers in this bitmap
 	for i := range rb.containers {
 		c1 := &rb.containers[i]
-		hi := c1.Key
+		hi := rb.index[i]
 
 		// Check if other bitmap has a container at this key
 		idx, exists := other.ctrFind(hi)
