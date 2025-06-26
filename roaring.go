@@ -3,6 +3,7 @@ package roaring
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
 	containers []container // Containers in sorted order by key
+	index      []uint16    // Container keys for cache-efficient searching
 	scratch    []uint32
 }
 
@@ -14,70 +15,16 @@ func New() *Bitmap {
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	c := rb.ctrLoad(hi)
-	c.set(lo)
-}
-
-// ctrFind finds the container for the given high bits (read-only, no creation)
-// Returns (index, found) where index is the insertion point if not found
-func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
-	containers := rb.containers
-	n := len(containers)
-
-	// Quick bounds check for early exit
-	switch {
-	case n == 0:
-		return 0, false
-	case hi < containers[0].Key:
-		return 0, false
-	case hi > containers[n-1].Key:
-		return n, false
-	case hi == containers[0].Key:
-		return 0, true
-	case hi == containers[n-1].Key:
-		return n - 1, true
+	idx, exists := rb.ctrFind(hi)
+	if !exists {
+		rb.ctrAdd(hi, idx, &container{
+			Key:  hi,
+			Type: typeArray,
+			Size: 0,
+			Data: make([]uint16, 0, 64),
+		})
 	}
-
-	// Linear search for small arrays (cache-friendly, fewer branches)
-	if n <= 8 {
-		for i, c := range containers {
-			switch {
-			case c.Key == hi:
-				return i, true
-			case c.Key > hi:
-				return i, false
-			}
-		}
-		return n, false
-	}
-
-	// Galloping search for larger arrays
-	// First, find the range using exponential search
-	pos := 1
-	for pos < n && containers[pos].Key < hi {
-		pos <<= 1 // Double the position
-	}
-
-	// Binary search in the found range
-	left := pos >> 1
-	right := pos
-	if right >= n {
-		right = n - 1
-	}
-
-	for left <= right {
-		mid := left + (right-left)>>1
-		switch {
-		case containers[mid].Key == hi:
-			return mid, true
-		case containers[mid].Key < hi:
-			left = mid + 1
-		default:
-			right = mid - 1
-		}
-	}
-
-	return left, false
+	rb.containers[idx].set(lo)
 }
 
 // Remove removes the bit x from the bitmap
@@ -116,6 +63,7 @@ func (rb *Bitmap) Count() int {
 // Clear clears the bitmap
 func (rb *Bitmap) Clear() {
 	rb.containers = rb.containers[:0]
+	rb.index = rb.index[:0]
 }
 
 // Optimize optimizes all containers to use the most efficient representation
@@ -147,112 +95,69 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 		}
 	}
 
+	// Clone index
+	into.index = make([]uint16, len(rb.index))
+	copy(into.index, rb.index)
+
 	return into
 }
 
 // ---------------------------------------- Container ----------------------------------------
 
-// ctrLoad finds the container for the given high bits, creating it if it doesn't exist
-func (rb *Bitmap) ctrLoad(hi uint16) *container {
-	containers := rb.containers
-	n := len(containers)
-
-	// Quick bounds check for early exit
+// ctrFind finds the container for the given high bits (read-only, no creation)
+// Returns (index, found) where index is the insertion point if not found
+func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
+	index, n := rb.index, len(rb.index)
 	switch {
 	case n == 0:
-		// Create first container
-		rb.ctrAdd(hi, 0, &container{
-			Key:  hi,
-			Type: typeArray,
-			Size: 0,
-			Data: make([]uint16, 0, 64),
-		})
-		return &rb.containers[0]
-	case hi < containers[0].Key:
-		// Insert at beginning
-		rb.ctrAdd(hi, 0, &container{
-			Key:  hi,
-			Type: typeArray,
-			Size: 0,
-			Data: make([]uint16, 0, 64),
-		})
-		return &rb.containers[0]
-	case hi > containers[n-1].Key:
-		// Insert at end
-		rb.ctrAdd(hi, n, &container{
-			Key:  hi,
-			Type: typeArray,
-			Size: 0,
-			Data: make([]uint16, 0, 64),
-		})
-		return &rb.containers[n]
-	case hi == containers[0].Key:
-		return &containers[0]
-	case hi == containers[n-1].Key:
-		return &containers[n-1]
-	}
-
-	// Linear search for small arrays (cache-friendly, fewer branches)
-	if n <= 8 {
-		for i, c := range containers {
+		return 0, false
+	case hi < index[0]:
+		return 0, false
+	case hi > index[n-1]:
+		return n, false
+	case hi == index[0]:
+		return 0, true
+	case hi == index[n-1]:
+		return n - 1, true
+	case n <= 8:
+		for i, key := range index {
 			switch {
-			case c.Key == hi:
-				return &rb.containers[i]
-			case c.Key > hi:
-				// Insert at position i
-				rb.ctrAdd(hi, i, &container{
-					Key:  hi,
-					Type: typeArray,
-					Size: 0,
-					Data: make([]uint16, 0, 64),
-				})
-				return &rb.containers[i]
+			case key == hi:
+				return i, true
+			case key > hi:
+				return i, false
 			}
 		}
-		// Insert at end
-		rb.ctrAdd(hi, n, &container{
-			Key:  hi,
-			Type: typeArray,
-			Size: 0,
-			Data: make([]uint16, 0, 64),
-		})
-		return &rb.containers[n]
-	}
+		return n, false
 
 	// Galloping search for larger arrays
-	// First, find the range using exponential search
-	pos := 1
-	for pos < n && containers[pos].Key < hi {
-		pos <<= 1 // Double the position
-	}
-
-	// Binary search in the found range
-	left := pos >> 1
-	right := pos
-	if right >= n {
-		right = n - 1
-	}
-
-	for left <= right {
-		mid := left + (right-left)>>1
-		switch {
-		case containers[mid].Key == hi:
-			return &rb.containers[mid]
-		case containers[mid].Key < hi:
-			left = mid + 1
-		default:
-			right = mid - 1
+	default:
+		pos := 1
+		for pos < n && index[pos] < hi {
+			pos <<= 1 // Double the position
 		}
-	}
 
-	// Not found, create at insertion point (left)
-	rb.ctrAdd(hi, left, &container{
-		Key:  hi,
-		Type: typeArray,
-		Size: 0,
-		Data: make([]uint16, 0, 64),
-	})
-	return &rb.containers[left]
+		// Binary search in the found range
+		left := pos >> 1
+		right := pos
+		if right >= n {
+			right = n - 1
+		}
+
+		for left <= right {
+			mid := left + (right-left)>>1
+			switch {
+			case index[mid] == hi:
+				return mid, true
+			case index[mid] < hi:
+				left = mid + 1
+			default:
+				right = mid - 1
+			}
+		}
+
+		return left, false
+	}
 }
 
 // ctrAdd inserts a container at the given position
@@ -263,6 +168,13 @@ func (rb *Bitmap) ctrAdd(hi uint16, pos int, c *container) {
 		copy(rb.containers[pos+1:], rb.containers[pos:len(rb.containers)-1])
 	}
 	rb.containers[pos] = *c
+
+	// Keep index in sync
+	rb.index = append(rb.index, 0)
+	if pos < len(rb.index)-1 {
+		copy(rb.index[pos+1:], rb.index[pos:len(rb.index)-1])
+	}
+	rb.index[pos] = hi
 }
 
 // ctrDel removes the container at the given position
@@ -274,4 +186,8 @@ func (rb *Bitmap) ctrDel(pos int) {
 	// Remove container by shifting slice
 	copy(rb.containers[pos:], rb.containers[pos+1:])
 	rb.containers = rb.containers[:len(rb.containers)-1]
+
+	// Keep index in sync
+	copy(rb.index[pos:], rb.index[pos+1:])
+	rb.index = rb.index[:len(rb.index)-1]
 }
