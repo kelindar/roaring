@@ -109,29 +109,29 @@ func (rb *Bitmap) andContainers(c1, c2 *container) bool {
 
 // andArrayArray performs AND between two array containers
 func (rb *Bitmap) andArrayArray(c1, c2 *container) bool {
-	arr1 := c1.arr()
-	arr2 := c2.arr()
-	if len(arr1) == 0 || len(arr2) == 0 {
+	a, b := c1.arr(), c2.arr()
+	if len(a) == 0 || len(b) == 0 {
 		return false
 	}
 
-	out := arr1[:0]
-	i, j := 0, 0
-	for i < len(arr1) && j < len(arr2) {
+	i, j, k := 0, 0, 0
+	for i < len(a) && j < len(b) {
+		av, bv := a[i], b[j]
 		switch {
-		case arr1[i] == arr2[j]:
-			out = append(out, arr1[i])
+		case av == bv:
+			a[k] = av
+			k++
 			i++
 			j++
-		case arr1[i] < arr2[j]:
+		case av < bv:
 			i++
-		case arr1[i] > arr2[j]:
+		default: // av > bv
 			j++
 		}
 	}
 
-	c1.Data = out
-	c1.Size = uint32(len(out))
+	c1.Data = a[:k]
+	c1.Size = uint32(len(c1.Data))
 	return true
 }
 
