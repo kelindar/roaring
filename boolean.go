@@ -55,29 +55,31 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 	}
 
 	// Track containers that become empty for batch removal
-	emptyContainers := make([]uint16, 0, 8)
+	emptyIndices := make([]int, 0, 8)
 
 	// Iterate through all containers in this bitmap
-	rb.iterateContainers(func(base uint32, c1 *container) {
-		hi := uint16(base >> 16)
+	for i := range rb.containers {
+		c1 := &rb.containers[i]
+		hi := c1.Key
 
 		// Check if other bitmap has a container at this key
-		c2, exists := other.ctrFind(hi)
+		idx, exists := other.ctrFind(hi)
 		if !exists {
 			// Other bitmap doesn't have this container - mark for removal
-			emptyContainers = append(emptyContainers, hi)
-			return
+			emptyIndices = append(emptyIndices, i)
+			continue
 		}
 
 		// Both bitmaps have containers at this index - perform AND
+		c2 := &other.containers[idx]
 		if !rb.andContainers(c1, c2) {
-			emptyContainers = append(emptyContainers, hi)
+			emptyIndices = append(emptyIndices, i)
 		}
-	})
+	}
 
-	// Batch remove empty containers
-	for _, hi := range emptyContainers {
-		rb.ctrDel(hi)
+	// Batch remove empty containers (in reverse order to maintain indices)
+	for i := len(emptyIndices) - 1; i >= 0; i-- {
+		rb.ctrDel(emptyIndices[i])
 	}
 }
 

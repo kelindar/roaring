@@ -2,7 +2,7 @@ package roaring
 
 const (
 	arrMinSize    = 2048
-	runMinSize    = 100
+	runMinSize    = 128
 	runMaxSize    = 2048
 	optimizeEvery = 2048
 )

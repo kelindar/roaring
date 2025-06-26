@@ -2,12 +2,15 @@ package roaring
 
 // Range calls the given function for each value in the bitmap
 func (rb *Bitmap) Range(fn func(x uint32)) {
-	rb.iterateContainers(func(base uint32, c *container) {
+	for i := range rb.containers {
+		c := &rb.containers[i]
+		base := uint32(c.Key) << 16
+
 		switch c.Type {
 		case typeArray:
 			data := c.Data
-			for i := 0; i < len(data); i++ {
-				fn(base | uint32(data[i]))
+			for j := 0; j < len(data); j++ {
+				fn(base | uint32(data[j]))
 			}
 
 		case typeBitmap:
@@ -27,7 +30,7 @@ func (rb *Bitmap) Range(fn func(x uint32)) {
 				}
 			}
 		}
-	})
+	}
 }
 
 // Filter iterates over the bitmap elements and calls a predicate provided for each
@@ -37,12 +40,15 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 	// Collect all values to remove first to avoid modification during iteration
 	var toRemove []uint32
 
-	rb.iterateContainers(func(base uint32, c *container) {
+	for i := range rb.containers {
+		c := &rb.containers[i]
+		base := uint32(c.Key) << 16
+
 		switch c.Type {
 		case typeArray:
 			data := c.Data
-			for i := 0; i < len(data); i++ {
-				value := base | uint32(data[i])
+			for j := 0; j < len(data); j++ {
+				value := base | uint32(data[j])
 				if !f(value) {
 					toRemove = append(toRemove, value)
 				}
@@ -71,7 +77,7 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 				}
 			}
 		}
-	})
+	}
 
 	// Remove all values that failed the predicate
 	for _, x := range toRemove {
