@@ -1,9 +1,5 @@
 package roaring
 
-import (
-	"math/bits"
-)
-
 // And performs bitwise AND operation with other bitmap(s)
 func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 	// Handle nil inputs efficiently
@@ -85,15 +81,14 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 
 // andContainers performs efficient AND between two containers
 func (rb *Bitmap) andContainers(c1, c2 *container) bool {
-	// Ensure we own c1's data before modifying it (COW protection)
 	c1.cowEnsureOwned()
 
 	// Use most efficient algorithm based on container types
 	switch {
 	case c1.Type == typeArray && c2.Type == typeArray:
-		return rb.andArrayArray(c1, c2)
+		return rb.arrAndArr(c1, c2)
 	case c1.Type == typeArray && c2.Type == typeBitmap:
-		return rb.andArrayBitmap(c1, c2)
+		return rb.arrAndBmp(c1, c2)
 	case c1.Type == typeBitmap && c2.Type == typeArray:
 		return rb.andBitmapArray(c1, c2)
 	case c1.Type == typeBitmap && c2.Type == typeBitmap:
@@ -107,8 +102,8 @@ func (rb *Bitmap) andContainers(c1, c2 *container) bool {
 	}
 }
 
-// andArrayArray performs AND between two array containers
-func (rb *Bitmap) andArrayArray(c1, c2 *container) bool {
+// arrAndArr performs AND between two array containers
+func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 	a, b := c1.arr(), c2.arr()
 	if len(a) == 0 || len(b) == 0 {
 		return false
@@ -135,8 +130,8 @@ func (rb *Bitmap) andArrayArray(c1, c2 *container) bool {
 	return true
 }
 
-// andArrayBitmap performs AND between array and bitmap containers
-func (rb *Bitmap) andArrayBitmap(c1, c2 *container) bool {
+// arrAndBmp performs AND between array and bitmap containers
+func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
 	arr := c1.arr()
 	bmp := c2.bmp()
 	result := arr[:0]
@@ -207,38 +202,14 @@ func (rb *Bitmap) andBitmapBitmap(c1, c2 *container) bool {
 		return false
 	}
 
-	// Ensure we process the shorter bitmap
-	minLen := len(bmp1)
-	if len(bmp2) < minLen {
-		minLen = len(bmp2)
-	}
-
-	count := 0
-	// Process word by word for better performance
-	for i := 0; i < minLen; i++ {
-		word := bmp1[i] & bmp2[i]
-		bmp1[i] = word
-		if word != 0 {
-			count += bits.OnesCount64(word)
-		}
-	}
-
-	// Clear remaining words in bmp1 if it's longer
-	for i := minLen; i < len(bmp1); i++ {
-		bmp1[i] = 0
-	}
-
-	if count == 0 {
-		return false
-	}
-
-	c1.Size = uint32(count)
+	// Perform AND operation and update container size
+	bmp1.And(bmp2)
+	c1.Size = uint32(bmp1.Count())
 
 	// Convert to array if small enough
-	if count <= arrMinSize {
+	if c1.Size <= arrMinSize {
 		rb.bitmapToArray(c1)
 	}
-
 	return true
 }
 
