@@ -2,7 +2,7 @@ package roaring
 
 // Range calls the given function for each value in the bitmap
 func (rb *Bitmap) Range(fn func(x uint32)) {
-	rb.containers(func(base uint32, c *container) {
+	rb.iterateContainers(func(base uint32, c *container) {
 		switch c.Type {
 		case typeArray:
 			data := c.Data
@@ -34,23 +34,26 @@ func (rb *Bitmap) Range(fn func(x uint32)) {
 // containing element. If the predicate returns false, the bitmap at the element's
 // position is set to zero.
 func (rb *Bitmap) Filter(f func(x uint32) bool) {
-	rb.containers(func(base uint32, c *container) {
-		rb.scratch = rb.scratch[:0]
-		c.cowEnsureOwned()
+	// Collect all values to remove first to avoid modification during iteration
+	var toRemove []uint32
 
+	rb.iterateContainers(func(base uint32, c *container) {
 		switch c.Type {
 		case typeArray:
 			data := c.Data
 			for i := 0; i < len(data); i++ {
-				if !f(base | uint32(data[i])) {
-					rb.scratch = append(rb.scratch, base|uint32(data[i]))
+				value := base | uint32(data[i])
+				if !f(value) {
+					toRemove = append(toRemove, value)
 				}
 			}
 
 		case typeBitmap:
-			bmp := c.bmp()
-			bmp.Filter(func(value uint32) bool {
-				return f(base | value)
+			c.bmp().Range(func(value uint32) {
+				fullValue := base | value
+				if !f(fullValue) {
+					toRemove = append(toRemove, fullValue)
+				}
 			})
 
 		case typeRun:
@@ -58,16 +61,20 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 			for _, r := range runs {
 				start, end := uint32(r[0]), uint32(r[1])
 				for curr := start; curr <= end; curr++ {
-					if !f(base | curr) {
-						rb.scratch = append(rb.scratch, base|curr)
+					value := base | curr
+					if !f(value) {
+						toRemove = append(toRemove, value)
+					}
+					if curr == end {
+						break // Prevent overflow
 					}
 				}
 			}
 		}
-
-		// Remove all values that failed the predicate for this container
-		for _, x := range rb.scratch {
-			rb.Remove(x)
-		}
 	})
+
+	// Remove all values that failed the predicate
+	for _, x := range toRemove {
+		rb.Remove(x)
+	}
 }

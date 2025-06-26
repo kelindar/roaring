@@ -16,13 +16,13 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 	bitmaps := make([]*Bitmap, 0, len(extra)+1)
 	bitmaps = append(bitmaps, other)
 	for _, bm := range extra {
-		if bm != nil && !bm.blocks.isEmpty() {
+		if bm != nil && len(bm.indices) > 0 {
 			bitmaps = append(bitmaps, bm)
 		}
 	}
 
 	// If no valid bitmaps or empty result, clear
-	if len(bitmaps) == 0 || rb.blocks.isEmpty() {
+	if len(bitmaps) == 0 || len(rb.indices) == 0 {
 		rb.Clear()
 		return
 	}
@@ -35,7 +35,7 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 
 	// Multiple bitmaps - use iterative approach
 	for _, bm := range bitmaps {
-		if rb.blocks.isEmpty() {
+		if len(rb.indices) == 0 {
 			break // Early exit
 		}
 		rb.andSingle(bm)
@@ -44,14 +44,19 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 
 // andSingle performs AND with a single bitmap efficiently
 func (rb *Bitmap) andSingle(other *Bitmap) {
-	if other == nil || other.blocks.isEmpty() {
+	if other == nil || len(other.indices) == 0 {
 		rb.Clear()
 		return
 	}
 
-	// Find intersection of container ranges using span optimization
-	minStart := max(rb.blocks.span[0], other.blocks.span[0])
-	minEnd := min(rb.blocks.span[1], other.blocks.span[1])
+	// Find intersection of container ranges
+	if len(rb.indices) == 0 || len(other.indices) == 0 {
+		rb.Clear()
+		return
+	}
+
+	minStart := max(rb.indices[0], other.indices[0])
+	minEnd := min(rb.indices[len(rb.indices)-1], other.indices[len(other.indices)-1])
 
 	if minStart > minEnd {
 		rb.Clear()
@@ -61,86 +66,36 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 	// Track containers that become empty for batch removal
 	emptyContainers := make([]uint16, 0, 8)
 
-	// Process only intersecting containers
-	for i := int(minStart); i <= int(minEnd); i++ {
-		cblk := rb.blocks.get(uint8(i))
-		otherCblk := other.blocks.get(uint8(i))
+	// Use two pointers to efficiently iterate through sorted indices
+	i, j := 0, 0
+	for i < len(rb.indices) && j < len(other.indices) {
+		hi1, hi2 := rb.indices[i], other.indices[j]
 
-		if cblk == nil || otherCblk == nil {
-			// No intersection at this block level
-			if cblk != nil {
-				cblk.iterate(func(lo8 uint8, c *container) {
-					key := (uint16(i) << 8) | uint16(lo8)
-					emptyContainers = append(emptyContainers, key)
-				})
-			}
-			continue
-		}
-
-		// Find intersection within blocks
-		blockMinStart := max(cblk.span[0], otherCblk.span[0])
-		blockMinEnd := min(cblk.span[1], otherCblk.span[1])
-
-		if blockMinStart > blockMinEnd {
-			// No intersection at container level - remove entire block
-			cblk.iterate(func(lo8 uint8, c *container) {
-				key := (uint16(i) << 8) | uint16(lo8)
-				emptyContainers = append(emptyContainers, key)
-			})
-			continue
-		}
-
-		// Process containers within intersecting range
-		for j := int(blockMinStart); j <= int(blockMinEnd); j++ {
-			c1 := cblk.get(uint8(j))
-			c2 := otherCblk.get(uint8(j))
-
-			if c1 == nil || c2 == nil {
-				if c1 != nil {
-					key := (uint16(i) << 8) | uint16(j)
-					emptyContainers = append(emptyContainers, key)
-				}
-				continue
-			}
-
-			// Perform container AND
+		switch {
+		case hi1 == hi2:
+			// Both bitmaps have containers at this index - perform AND
+			c1, c2 := &rb.containers[i], &other.containers[j]
 			if !rb.andContainers(c1, c2) {
-				key := (uint16(i) << 8) | uint16(j)
-				emptyContainers = append(emptyContainers, key)
+				emptyContainers = append(emptyContainers, hi1)
 			}
-		}
+			i++
+			j++
 
-		// Remove containers outside intersection range
-		for j := int(cblk.span[0]); j < int(blockMinStart); j++ {
-			if c := cblk.get(uint8(j)); c != nil {
-				key := (uint16(i) << 8) | uint16(j)
-				emptyContainers = append(emptyContainers, key)
-			}
-		}
-		for j := int(blockMinEnd) + 1; j <= int(cblk.span[1]); j++ {
-			if c := cblk.get(uint8(j)); c != nil {
-				key := (uint16(i) << 8) | uint16(j)
-				emptyContainers = append(emptyContainers, key)
-			}
+		case hi1 < hi2:
+			// rb has container but other doesn't - remove it
+			emptyContainers = append(emptyContainers, hi1)
+			i++
+
+		case hi1 > hi2:
+			// other has container but rb doesn't - skip
+			j++
 		}
 	}
 
-	// Remove containers outside intersection range
-	for i := int(rb.blocks.span[0]); i < int(minStart); i++ {
-		if cblk := rb.blocks.get(uint8(i)); cblk != nil {
-			cblk.iterate(func(lo8 uint8, c *container) {
-				key := (uint16(i) << 8) | uint16(lo8)
-				emptyContainers = append(emptyContainers, key)
-			})
-		}
-	}
-	for i := int(minEnd) + 1; i <= int(rb.blocks.span[1]); i++ {
-		if cblk := rb.blocks.get(uint8(i)); cblk != nil {
-			cblk.iterate(func(lo8 uint8, c *container) {
-				key := (uint16(i) << 8) | uint16(lo8)
-				emptyContainers = append(emptyContainers, key)
-			})
-		}
+	// Remove any remaining containers in rb that don't exist in other
+	for i < len(rb.indices) {
+		emptyContainers = append(emptyContainers, rb.indices[i])
+		i++
 	}
 
 	// Batch remove empty containers

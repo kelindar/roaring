@@ -1,19 +1,15 @@
 package roaring
 
-// cblock represents a block of containers using the new block structure
-type cblock = block[container]
-
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	blocks  *block[cblock] // Top-level block for container blocks
-	scratch []uint32
+	indices    []uint16    // Sorted high 16-bit keys for containers
+	containers []container // Containers corresponding to indices
+	scratch    []uint32
 }
 
 // New creates a new empty roaring bitmap
 func New() *Bitmap {
-	return &Bitmap{
-		blocks: newBlock[cblock](),
-	}
+	return &Bitmap{}
 }
 
 // Set sets the bit x in the bitmap and grows it if necessary.
@@ -21,12 +17,14 @@ func (rb *Bitmap) Set(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
 	c, exists := rb.ctrFind(hi)
 	if !exists {
-		c = &container{
+		newContainer := &container{
 			Type: typeArray,
 			Size: 0,
 			Data: make([]uint16, 0, 64),
 		}
-		rb.ctrAdd(hi, c)
+		rb.ctrAdd(hi, newContainer)
+		// Get the stored container (not the local pointer)
+		c, _ = rb.ctrFind(hi)
 	}
 
 	c.set(lo)
@@ -59,7 +57,7 @@ func (rb *Bitmap) Contains(x uint32) bool {
 // Count returns the total number of bits set to 1 in the bitmap
 func (rb *Bitmap) Count() int {
 	count := 0
-	rb.containers(func(base uint32, c *container) {
+	rb.iterateContainers(func(base uint32, c *container) {
 		count += int(c.Size)
 	})
 	return count
@@ -67,12 +65,13 @@ func (rb *Bitmap) Count() int {
 
 // Clear clears the bitmap
 func (rb *Bitmap) Clear() {
-	rb.blocks = newBlock[cblock]()
+	rb.indices = rb.indices[:0]
+	rb.containers = rb.containers[:0]
 }
 
 // Optimize optimizes all containers to use the most efficient representation
 func (rb *Bitmap) Optimize() {
-	rb.containers(func(base uint32, c *container) {
+	rb.iterateContainers(func(base uint32, c *container) {
 		c.optimize()
 	})
 }
@@ -80,182 +79,114 @@ func (rb *Bitmap) Optimize() {
 // Clone clones the bitmap
 func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	if into == nil {
-		into = &Bitmap{
-			blocks: newBlock[cblock](),
-		}
+		into = &Bitmap{}
 	}
 
-	// Clone all blocks and containers
-	rb.blocks.iterate(func(hi8 uint8, cblk *cblock) {
-		newCblk := newBlock[container]()
-		into.blocks.set(hi8, newCblk)
+	// Clone containers directly
+	into.indices = make([]uint16, len(rb.indices))
+	into.containers = make([]container, len(rb.containers))
 
-		cblk.iterate(func(lo8 uint8, c *container) {
-			newCblk.set(lo8, c.cowClone())
-		})
-	})
+	copy(into.indices, rb.indices)
+	for i := range rb.containers {
+		// Mark original as shared and copy with shared data
+		rb.containers[i].Shared = true
+		into.containers[i] = container{
+			Type:   rb.containers[i].Type,
+			Call:   rb.containers[i].Call,
+			Size:   rb.containers[i].Size,
+			Data:   rb.containers[i].Data, // Share the same underlying slice
+			Shared: true,
+		}
+	}
 
 	return into
 }
 
 // ---------------------------------------- Container ----------------------------------------
 
-// ctrFind finds the container for the given high bits
+// ctrFind finds the container for the given high bits using binary search
 func (rb *Bitmap) ctrFind(hi uint16) (*container, bool) {
-	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
-	cblk := rb.blocks.get(hi8)
-	if cblk == nil {
+	pos, found := rb.findContainer(hi)
+	if !found {
 		return nil, false
 	}
+	return &rb.containers[pos], true
+}
 
-	container := cblk.get(lo8)
-	if container == nil {
-		return nil, false
+// findContainer performs binary search to find container position
+func (rb *Bitmap) findContainer(hi uint16) (int, bool) {
+	if len(rb.indices) == 0 {
+		return 0, false
 	}
 
-	return container, true
+	// Quick bounds check
+	if hi < rb.indices[0] {
+		return 0, false
+	}
+	if hi > rb.indices[len(rb.indices)-1] {
+		return len(rb.indices), false
+	}
+
+	// Binary search
+	left, right := 0, len(rb.indices)
+	for left < right {
+		mid := left + (right-left)/2
+		switch {
+		case rb.indices[mid] < hi:
+			left = mid + 1
+		case rb.indices[mid] > hi:
+			right = mid
+		default:
+			return mid, true
+		}
+	}
+
+	return left, false
 }
 
 // ctrAdd sets a container at the given high bits
 func (rb *Bitmap) ctrAdd(hi uint16, c *container) {
-	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
-
-	// Get or create the container block
-	cblk := rb.blocks.get(hi8)
-	if cblk == nil {
-		cblk = newBlock[container]()
-		rb.blocks.set(hi8, cblk)
+	pos, found := rb.findContainer(hi)
+	if found {
+		rb.containers[pos] = *c
+		return
 	}
 
-	// Set the container
-	cblk.set(lo8, c)
+	// Insert new container at correct position to maintain sorted order
+	rb.indices = append(rb.indices, 0)
+	rb.containers = append(rb.containers, container{})
+
+	// Shift elements to make room
+	if pos < len(rb.indices)-1 {
+		copy(rb.indices[pos+1:], rb.indices[pos:len(rb.indices)-1])
+		copy(rb.containers[pos+1:], rb.containers[pos:len(rb.containers)-1])
+	}
+
+	// Insert new elements
+	rb.indices[pos] = hi
+	rb.containers[pos] = *c
 }
 
 // ctrDel removes the container at the given high bits
 func (rb *Bitmap) ctrDel(hi uint16) {
-	hi8, lo8 := uint8(hi>>8), uint8(hi&0xFF)
-	cblk := rb.blocks.get(hi8)
-	if cblk == nil {
+	pos, found := rb.findContainer(hi)
+	if !found {
 		return
 	}
 
-	// Remove the container
-	cblk.del(lo8)
+	// Remove element by shifting slices
+	copy(rb.indices[pos:], rb.indices[pos+1:])
+	copy(rb.containers[pos:], rb.containers[pos+1:])
 
-	// If block is empty, remove it
-	if cblk.isEmpty() {
-		rb.blocks.del(hi8)
-	}
+	// Shrink slices
+	rb.indices = rb.indices[:len(rb.indices)-1]
+	rb.containers = rb.containers[:len(rb.containers)-1]
 }
 
-// containers iterates over all containers in the bitmap
-func (rb *Bitmap) containers(fn func(base uint32, c *container)) {
-	rb.blocks.iterate(func(hi8 uint8, cblk *cblock) {
-		cblk.iterate(func(lo8 uint8, c *container) {
-			fn((uint32(hi8)<<24)|uint32(lo8)<<16, c)
-		})
-	})
-}
-
-// ---------------------------------------- Block ----------------------------------------
-
-// block represents a sparse array with 256 slots using a fill bitmap
-type block[T any] struct {
-	span  [2]uint8 // Min/max index for quick iteration
-	count uint16   // Number of occupied slots
-	data  [256]*T  // 256 slots for data
-}
-
-// newBlock creates a new empty block
-func newBlock[T any]() *block[T] {
-	return &block[T]{}
-}
-
-// get retrieves the value at the specified index
-func (b *block[T]) get(idx uint8) *T {
-	return b.data[idx]
-}
-
-// set sets a value at the specified index
-func (b *block[T]) set(idx uint8, value *T) {
-	wasEmpty := b.isEmpty()
-	hadValue := b.has(idx)
-
-	b.data[idx] = value
-	if !hadValue {
-		b.count++
-	}
-
-	switch {
-	case wasEmpty:
-		b.span[0] = idx
-		b.span[1] = idx
-	case idx < b.span[0]:
-		b.span[0] = idx
-	case idx > b.span[1]:
-		b.span[1] = idx
-	}
-}
-
-// del removes a value from the block
-func (b *block[T]) del(idx uint8) {
-	if !b.has(idx) {
-		return
-	}
-
-	b.data[idx] = nil
-	b.count--
-	switch {
-	case b.count == 0:
-		b.span[0] = 0
-		b.span[1] = 0
-	case idx == b.span[0] || idx == b.span[1]:
-		b.updateSpan()
-	}
-}
-
-// has checks if there's a value at the specified index
-func (b *block[T]) has(idx uint8) bool {
-	return b.data[idx] != nil
-}
-
-// isEmpty checks if the block has no values
-func (b *block[T]) isEmpty() bool {
-	return b.count == 0
-}
-
-// updateSpan recalculates the span by finding first and last set bits
-func (b *block[T]) updateSpan() {
-	if b.count == 0 {
-		b.span[0] = 0
-		b.span[1] = 0
-		return
-	}
-
-	// Find first set
-	for i := 0; i < 256; i++ {
-		if b.data[i] != nil {
-			b.span[0] = uint8(i)
-			break
-		}
-	}
-
-	// Find last set
-	for i := 255; i >= 0; i-- {
-		if b.data[i] != nil {
-			b.span[1] = uint8(i)
-			break
-		}
-	}
-}
-
-// iterate calls fn for each non-nil value in the block
-func (b *block[T]) iterate(fn func(idx uint8, value *T)) {
-	var ct uint16
-	for i := int(b.span[0]); i <= int(b.span[1]) && ct < b.count; i++ {
-		if b.data[i] != nil {
-			fn(uint8(i), b.data[i])
-			ct++
-		}
+// iterateContainers iterates over all containers in the bitmap
+func (rb *Bitmap) iterateContainers(fn func(base uint32, c *container)) {
+	for i, hi := range rb.indices {
+		base := uint32(hi) << 16
+		fn(base, &rb.containers[i])
 	}
 }
