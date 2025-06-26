@@ -20,6 +20,7 @@ func (rb *Bitmap) Set(x uint32) {
 	c, exists := rb.ctrFind(hi)
 	if !exists {
 		newContainer := &container{
+			Key:  hi,
 			Type: typeArray,
 			Size: 0,
 			Data: make([]uint16, 0, 64),
@@ -85,14 +86,14 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	}
 
 	// Clone index bitmap and containers
-	into.index = make(bitmap.Bitmap, len(rb.index))
-	copy(into.index, rb.index)
+	rb.index.Clone(&into.index)
 	into.containers = make([]container, len(rb.containers))
 
 	for i := range rb.containers {
 		// Mark original as shared and copy with shared data
 		rb.containers[i].Shared = true
 		into.containers[i] = container{
+			Key:    rb.containers[i].Key,
 			Type:   rb.containers[i].Type,
 			Call:   rb.containers[i].Call,
 			Size:   rb.containers[i].Size,
