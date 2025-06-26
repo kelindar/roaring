@@ -16,13 +16,13 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 	bitmaps := make([]*Bitmap, 0, len(extra)+1)
 	bitmaps = append(bitmaps, other)
 	for _, bm := range extra {
-		if bm != nil && len(bm.indices) > 0 {
+		if bm != nil && len(bm.containers) > 0 {
 			bitmaps = append(bitmaps, bm)
 		}
 	}
 
 	// If no valid bitmaps or empty result, clear
-	if len(bitmaps) == 0 || len(rb.indices) == 0 {
+	if len(bitmaps) == 0 || len(rb.containers) == 0 {
 		rb.Clear()
 		return
 	}
@@ -35,7 +35,7 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 
 	// Multiple bitmaps - use iterative approach
 	for _, bm := range bitmaps {
-		if len(rb.indices) == 0 {
+		if len(rb.containers) == 0 {
 			break // Early exit
 		}
 		rb.andSingle(bm)
@@ -44,59 +44,36 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 
 // andSingle performs AND with a single bitmap efficiently
 func (rb *Bitmap) andSingle(other *Bitmap) {
-	if other == nil || len(other.indices) == 0 {
+	if other == nil || len(other.containers) == 0 {
 		rb.Clear()
 		return
 	}
 
-	// Find intersection of container ranges
-	if len(rb.indices) == 0 || len(other.indices) == 0 {
-		rb.Clear()
-		return
-	}
-
-	minStart := max(rb.indices[0], other.indices[0])
-	minEnd := min(rb.indices[len(rb.indices)-1], other.indices[len(other.indices)-1])
-
-	if minStart > minEnd {
-		rb.Clear()
+	// If this bitmap is empty, result is empty
+	if len(rb.containers) == 0 {
 		return
 	}
 
 	// Track containers that become empty for batch removal
 	emptyContainers := make([]uint16, 0, 8)
 
-	// Use two pointers to efficiently iterate through sorted indices
-	i, j := 0, 0
-	for i < len(rb.indices) && j < len(other.indices) {
-		hi1, hi2 := rb.indices[i], other.indices[j]
+	// Iterate through all containers in this bitmap
+	rb.iterateContainers(func(base uint32, c1 *container) {
+		hi := uint16(base >> 16)
 
-		switch {
-		case hi1 == hi2:
-			// Both bitmaps have containers at this index - perform AND
-			c1, c2 := &rb.containers[i], &other.containers[j]
-			if !rb.andContainers(c1, c2) {
-				emptyContainers = append(emptyContainers, hi1)
-			}
-			i++
-			j++
-
-		case hi1 < hi2:
-			// rb has container but other doesn't - remove it
-			emptyContainers = append(emptyContainers, hi1)
-			i++
-
-		case hi1 > hi2:
-			// other has container but rb doesn't - skip
-			j++
+		// Check if other bitmap has a container at this key
+		c2, exists := other.ctrFind(hi)
+		if !exists {
+			// Other bitmap doesn't have this container - mark for removal
+			emptyContainers = append(emptyContainers, hi)
+			return
 		}
-	}
 
-	// Remove any remaining containers in rb that don't exist in other
-	for i < len(rb.indices) {
-		emptyContainers = append(emptyContainers, rb.indices[i])
-		i++
-	}
+		// Both bitmaps have containers at this index - perform AND
+		if !rb.andContainers(c1, c2) {
+			emptyContainers = append(emptyContainers, hi)
+		}
+	})
 
 	// Batch remove empty containers
 	for _, hi := range emptyContainers {

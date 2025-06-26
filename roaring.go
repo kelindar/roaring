@@ -1,9 +1,11 @@
 package roaring
 
+import "github.com/kelindar/bitmap"
+
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
-	indices    []uint16    // Sorted high 16-bit keys for containers
-	containers []container // Containers corresponding to indices
+	index      bitmap.Bitmap // Bitmap tracking which container keys exist
+	containers []container   // Containers in order of their keys
 	scratch    []uint32
 }
 
@@ -65,7 +67,7 @@ func (rb *Bitmap) Count() int {
 
 // Clear clears the bitmap
 func (rb *Bitmap) Clear() {
-	rb.indices = rb.indices[:0]
+	rb.index.Clear()
 	rb.containers = rb.containers[:0]
 }
 
@@ -82,11 +84,11 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 		into = &Bitmap{}
 	}
 
-	// Clone containers directly
-	into.indices = make([]uint16, len(rb.indices))
+	// Clone index bitmap and containers
+	into.index = make(bitmap.Bitmap, len(rb.index))
+	copy(into.index, rb.index)
 	into.containers = make([]container, len(rb.containers))
 
-	copy(into.indices, rb.indices)
 	for i := range rb.containers {
 		// Mark original as shared and copy with shared data
 		rb.containers[i].Shared = true
@@ -104,89 +106,67 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 
 // ---------------------------------------- Container ----------------------------------------
 
-// ctrFind finds the container for the given high bits using binary search
+// ctrFind finds the container for the given high bits using the bitmap index
 func (rb *Bitmap) ctrFind(hi uint16) (*container, bool) {
-	pos, found := rb.findContainer(hi)
-	if !found {
+	if !rb.index.Contains(uint32(hi)) {
 		return nil, false
 	}
+
+	// Find position in containers slice by counting set bits before hi
+	pos := rb.index.CountTo(uint32(hi))
+	if pos >= len(rb.containers) {
+		return nil, false
+	}
+
 	return &rb.containers[pos], true
-}
-
-// findContainer performs binary search to find container position
-func (rb *Bitmap) findContainer(hi uint16) (int, bool) {
-	if len(rb.indices) == 0 {
-		return 0, false
-	}
-
-	// Quick bounds check
-	if hi < rb.indices[0] {
-		return 0, false
-	}
-	if hi > rb.indices[len(rb.indices)-1] {
-		return len(rb.indices), false
-	}
-
-	// Binary search
-	left, right := 0, len(rb.indices)
-	for left < right {
-		mid := left + (right-left)/2
-		switch {
-		case rb.indices[mid] < hi:
-			left = mid + 1
-		case rb.indices[mid] > hi:
-			right = mid
-		default:
-			return mid, true
-		}
-	}
-
-	return left, false
 }
 
 // ctrAdd sets a container at the given high bits
 func (rb *Bitmap) ctrAdd(hi uint16, c *container) {
-	pos, found := rb.findContainer(hi)
-	if found {
+	key := uint32(hi)
+
+	if rb.index.Contains(key) {
+		// Update existing container
+		pos := rb.index.CountTo(key)
 		rb.containers[pos] = *c
 		return
 	}
 
-	// Insert new container at correct position to maintain sorted order
-	rb.indices = append(rb.indices, 0)
-	rb.containers = append(rb.containers, container{})
+	// Insert new container at correct position to maintain order
+	pos := rb.index.CountTo(key)
+	rb.index.Set(key)
 
-	// Shift elements to make room
-	if pos < len(rb.indices)-1 {
-		copy(rb.indices[pos+1:], rb.indices[pos:len(rb.indices)-1])
+	// Insert new container at position
+	rb.containers = append(rb.containers, container{})
+	if pos < len(rb.containers)-1 {
 		copy(rb.containers[pos+1:], rb.containers[pos:len(rb.containers)-1])
 	}
-
-	// Insert new elements
-	rb.indices[pos] = hi
 	rb.containers[pos] = *c
 }
 
 // ctrDel removes the container at the given high bits
 func (rb *Bitmap) ctrDel(hi uint16) {
-	pos, found := rb.findContainer(hi)
-	if !found {
+	key := uint32(hi)
+
+	if !rb.index.Contains(key) {
 		return
 	}
 
-	// Remove element by shifting slices
-	copy(rb.indices[pos:], rb.indices[pos+1:])
-	copy(rb.containers[pos:], rb.containers[pos+1:])
+	// Find position and remove
+	pos := rb.index.CountTo(key)
+	rb.index.Remove(key)
 
-	// Shrink slices
-	rb.indices = rb.indices[:len(rb.indices)-1]
+	// Remove container by shifting slice
+	copy(rb.containers[pos:], rb.containers[pos+1:])
 	rb.containers = rb.containers[:len(rb.containers)-1]
 }
 
 // iterateContainers iterates over all containers in the bitmap
 func (rb *Bitmap) iterateContainers(fn func(base uint32, c *container)) {
-	for i, hi := range rb.indices {
-		base := uint32(hi) << 16
-		fn(base, &rb.containers[i])
-	}
+	pos := 0
+	rb.index.Range(func(key uint32) {
+		base := key << 16
+		fn(base, &rb.containers[pos])
+		pos++
+	})
 }
