@@ -179,11 +179,12 @@ func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
 
 // andRunContainer performs AND between run container and other container
 func (rb *Bitmap) andRunContainer(c1, c2 *container) bool {
-	runs := c1.run()
-	newRuns := make([]run, 0, len(runs))
+	numRuns := len(c1.Data) / 2
+	newData := make([]uint16, 0, len(c1.Data))
+	var newSize uint32
 
-	for _, r := range runs {
-		start, end := r[0], r[1]
+	for i := 0; i < numRuns; i++ {
+		start, end := c1.Data[i*2], c1.Data[i*2+1]
 
 		// Check each value in run against other container
 		currentStart := uint16(0)
@@ -196,7 +197,8 @@ func (rb *Bitmap) andRunContainer(c1, c2 *container) bool {
 					inRun = true
 				}
 			} else if inRun {
-				newRuns = append(newRuns, run{currentStart, val - 1})
+				newData = append(newData, currentStart, val-1)
+				newSize += uint32(val-1) - uint32(currentStart) + 1
 				inRun = false
 			}
 
@@ -207,31 +209,26 @@ func (rb *Bitmap) andRunContainer(c1, c2 *container) bool {
 
 		// Handle final run
 		if inRun {
-			newRuns = append(newRuns, run{currentStart, end})
+			newData = append(newData, currentStart, end)
+			newSize += uint32(end) - uint32(currentStart) + 1
 		}
 	}
 
-	if len(newRuns) == 0 {
+	if len(newData) == 0 {
+		c1.Data = c1.Data[:0]
+		c1.Size = 0
 		return false
 	}
 
 	// Update container
-	c1.Data = make([]uint16, len(newRuns)*2)
-	newRunsSlice := c1.run()
-	copy(newRunsSlice, newRuns)
-
-	// Recalculate size
-	c1.Size = 0
-	for _, r := range newRuns {
-		c1.Size += uint32(r[1] - r[0] + 1)
-	}
-
+	c1.Data = newData
+	c1.Size = newSize
 	return true
 }
 
 // andContainerRun performs AND between container and run container
 func (rb *Bitmap) andContainerRun(c1, c2 *container) bool {
-	runs := c2.run()
+	numRuns := len(c2.Data) / 2
 
 	switch c1.Type {
 	case typeArray:
@@ -240,60 +237,50 @@ func (rb *Bitmap) andContainerRun(c1, c2 *container) bool {
 
 		for _, val := range arr {
 			// Check if value is in any run
-			for _, r := range runs {
-				if val >= r[0] && val <= r[1] {
+			for i := 0; i < numRuns; i++ {
+				start, end := c2.Data[i*2], c2.Data[i*2+1]
+				if val >= start && val <= end {
 					result = append(result, val)
 					break
 				}
 			}
 		}
 
-		if len(result) == 0 {
-			return false
-		}
-
 		c1.Data = result
 		c1.Size = uint32(len(result))
+		if c1.Size == 0 {
+			return false
+		}
 		return true
 
 	case typeBitmap:
 		bmp := c1.bmp()
+		newData := make([]uint16, 0, c1.Size)
 
-		// Save original bitmap state before clearing
-		original := make([]uint64, len(bmp))
-		copy(original, bmp)
-
-		// Clear bitmap
-		for i := range bmp {
-			bmp[i] = 0
-		}
-
-		count := 0
-		// Set bits only for values in runs
-		for _, r := range runs {
-			for val := r[0]; val <= r[1]; val++ {
-				blkIdx := val >> 6
-				bitIdx := val & 63
-				if int(blkIdx) < len(original) {
-					if original[blkIdx]&(uint64(1)<<bitIdx) != 0 {
-						bmp[blkIdx] |= uint64(1) << bitIdx
-						count++
-					}
+		for i := 0; i < numRuns; i++ {
+			start, end := c2.Data[i*2], c2.Data[i*2+1]
+			for v := start; v <= end; v++ {
+				if bmp.Contains(uint32(v)) {
+					newData = append(newData, v)
 				}
-				if val == r[1] {
+				if v == end {
 					break
 				}
 			}
 		}
 
-		if count == 0 {
+		if len(newData) == 0 {
+			c1.Data = c1.Data[:0]
+			c1.Size = 0
 			return false
 		}
 
-		c1.Size = uint32(count)
-		return true
+		c1.Data = newData
+		c1.Size = uint32(len(newData))
+		c1.Type = typeArray
+		c1.optimize()
+		return c1.Size > 0
 	}
-
 	return false
 }
 

@@ -23,8 +23,6 @@ type container struct {
 	Data   []uint16
 }
 
-type run [2]uint16
-
 // cowEnsureOwned ensures the container owns its data before modification
 func (c *container) cowEnsureOwned() {
 	if c.Shared {

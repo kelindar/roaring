@@ -127,7 +127,10 @@ func (c *container) arrIsDense() bool {
 // arrToRun attempts to convert array to run in a single pass
 func (c *container) arrToRun() bool {
 	array := c.arr()
-	runs := make([]run, 0, len(array)/4) // estimate runs needed
+	if len(array) == 0 {
+		return false
+	}
+	runsData := make([]uint16, 0, len(array)/2) // estimate runs needed
 
 	// Single iteration: build runs AND count them
 	i0 := array[0]
@@ -139,27 +142,25 @@ func (c *container) arrToRun() bool {
 			i1 = array[i]
 		} else {
 			// End current run and start new one
-			runs = append(runs, run{i0, i1})
+			runsData = append(runsData, i0, i1)
 			i0 = array[i]
 			i1 = array[i]
 		}
 	}
 
 	// Add the final run
-	runs = append(runs, run{i0, i1})
+	runsData = append(runsData, i0, i1)
 
 	// Check conversion criteria with the actual run count
-	numRuns := len(runs)
+	numRuns := len(runsData) / 2
 	sizeAsArray := len(array) * 2
-	sizeAsRun := numRuns*4 + 2
+	sizeAsRun := numRuns*4 + 2 // 2 uint16 per run = 4 bytes
 
 	// Only convert if we save at least 25% space and have reasonable compression
 	shouldConvert := sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
 	if shouldConvert {
-		c.Data = make([]uint16, len(runs)*2) // 2 uint16s per run
+		c.Data = runsData
 		c.Type = typeRun
-		newRuns := c.run()
-		copy(newRuns, runs)
 		return true
 	}
 

@@ -1,45 +1,37 @@
 package roaring
 
-import "unsafe"
-
-// run converts the container to a []run
-func (c *container) run() []run {
-	if len(c.Data) == 0 {
-		return nil
-	}
-
-	return unsafe.Slice((*run)(unsafe.Pointer(&c.Data[0])), len(c.Data)/2)
-}
-
 // runFind performs binary search to find a value in the run container
 func (c *container) runFind(value uint16) ([2]int, bool) {
-	runs := c.run()
-	if len(runs) == 0 {
+	numRuns := len(c.Data) / 2
+	if numRuns == 0 {
 		return [2]int{0, 0}, false
 	}
 
 	// Fast path for small containers - linear search is faster than binary search
-	if len(runs) <= 4 {
-		for i, run := range runs {
-			if value >= run[0] && value <= run[1] {
+	if numRuns <= 4 {
+		for i := 0; i < numRuns; i++ {
+			start := c.Data[i*2]
+			end := c.Data[i*2+1]
+			if value >= start && value <= end {
 				return [2]int{i, i}, true
 			}
-			if value < run[0] {
+			if value < start {
 				return [2]int{i, i}, false
 			}
 		}
-		return [2]int{len(runs), len(runs)}, false
+		return [2]int{numRuns, numRuns}, false
 	}
 
 	// Binary search for larger containers
-	left, right := 0, len(runs)-1
+	left, right := 0, numRuns-1
 	for left <= right {
 		mid := (left + right) / 2
-		run := runs[mid]
+		start := c.Data[mid*2]
+		end := c.Data[mid*2+1]
 		switch {
-		case value >= run[0] && value <= run[1]:
+		case value >= start && value <= end:
 			return [2]int{mid, mid}, true
-		case value < run[0]:
+		case value < start:
 			right = mid - 1
 		default:
 			left = mid + 1
@@ -56,23 +48,23 @@ func (c *container) runSet(value uint16) bool {
 		return false // Value already exists
 	}
 
-	runs := c.run()
 	idx := search[1]
+	numRuns := len(c.Data) / 2
 
 	// Check boundary cases for merging/extending
-	canMergeLeft := idx > 0 && len(runs) > 0 && runs[idx-1][1]+1 == value
-	canMergeRight := idx < len(runs) && len(runs) > 0 && runs[idx][0]-1 == value
+	canMergeLeft := idx > 0 && numRuns > 0 && c.Data[(idx-1)*2+1]+1 == value
+	canMergeRight := idx < numRuns && numRuns > 0 && c.Data[idx*2]-1 == value
 
 	switch {
 	case canMergeLeft && canMergeRight:
-		runs[idx-1][1] = runs[idx][1]
+		c.Data[(idx-1)*2+1] = c.Data[idx*2+1]
 		c.runRemoveRunAt(idx)
 	case canMergeLeft:
-		runs[idx-1][1] = value
+		c.Data[(idx-1)*2+1] = value
 	case canMergeRight:
-		runs[idx][0] = value
+		c.Data[idx*2] = value
 	default:
-		c.runInsertRunAt(idx, run{value, value})
+		c.runInsertRunAt(idx, value, value)
 	}
 
 	c.Size++
@@ -86,22 +78,20 @@ func (c *container) runDel(value uint16) bool {
 		return false
 	}
 
-	runs := c.run()
 	idx := search[0]
-	r := runs[idx]
+	start := c.Data[idx*2]
+	end := c.Data[idx*2+1]
 
 	switch {
-	case r[0] == r[1]:
+	case start == end:
 		c.runRemoveRunAt(idx)
-	case value == r[0]:
-		runs[idx][0] = value + 1
-	case value == r[1]:
-		runs[idx][1] = value - 1
+	case value == start:
+		c.Data[idx*2] = value + 1
+	case value == end:
+		c.Data[idx*2+1] = value - 1
 	default:
-		leftRun := run{r[0], value - 1}
-		rightRun := run{value + 1, r[1]}
-		runs[idx] = leftRun
-		c.runInsertRunAt(idx+1, rightRun)
+		c.Data[idx*2+1] = value - 1
+		c.runInsertRunAt(idx+1, value+1, end)
 	}
 
 	c.Size--
@@ -115,55 +105,48 @@ func (c *container) runHas(value uint16) bool {
 }
 
 // runInsertRunAt inserts a new run at the specified index
-func (c *container) runInsertRunAt(index int, newRun run) {
-	runs := c.run()
-	oldLen := len(runs)
-	newCapacity := (oldLen + 1) * 2
+func (c *container) runInsertRunAt(index int, start, end uint16) {
+	numRuns := len(c.Data) / 2
+	newLen := (numRuns + 1) * 2
 
 	// Try to avoid allocation if we have enough capacity
-	if cap(c.Data) >= newCapacity {
-		// Extend slice without reallocation
-		c.Data = c.Data[:newCapacity]
-		newRuns := c.run()
-
-		// Move existing runs to make space
-		if index < oldLen {
-			copy(newRuns[index+1:], runs[index:])
+	if cap(c.Data) >= newLen {
+		c.Data = c.Data[:newLen]
+		if index < numRuns {
+			copy(c.Data[(index+1)*2:], c.Data[index*2:numRuns*2])
 		}
-		newRuns[index] = newRun
 	} else {
 		// Need to allocate new slice with extra capacity for future insertions
-		extraCapacity := max(8, oldLen/2) // Add 25% extra capacity or minimum 8
-		c.Data = make([]uint16, newCapacity, newCapacity+extraCapacity*2)
-		newRuns := c.run()
+		extraCapacity := max(16, numRuns) // Add 50% extra capacity or minimum 8 runs
+		newData := make([]uint16, newLen, newLen+extraCapacity)
 
 		// Copy existing runs with efficient bulk operations
-		if index > 0 {
-			copy(newRuns[:index], runs[:index])
+		copy(newData, c.Data[:index*2])
+		if index < numRuns {
+			copy(newData[(index+1)*2:], c.Data[index*2:])
 		}
-		newRuns[index] = newRun
-		if index < oldLen {
-			copy(newRuns[index+1:], runs[index:])
-		}
+		c.Data = newData
 	}
+
+	c.Data[index*2] = start
+	c.Data[index*2+1] = end
 }
 
 // runRemoveRunAt removes the run at the specified index
 func (c *container) runRemoveRunAt(index int) {
-	runs := c.run()
-	if index < 0 || index >= len(runs) {
+	numRuns := len(c.Data) / 2
+	if index < 0 || index >= numRuns {
 		return
 	}
 
-	oldLen := len(runs)
-	if oldLen == 1 {
+	if numRuns == 1 {
 		c.Data = c.Data[:0] // Keep capacity but set length to 0
 		return
 	}
 
 	// Move runs in-place to avoid allocation
-	copy(runs[index:], runs[index+1:])
-	c.Data = c.Data[:(oldLen-1)*2] // Shrink slice length
+	copy(c.Data[index*2:], c.Data[(index+1)*2:])
+	c.Data = c.Data[:(numRuns-1)*2] // Shrink slice length
 }
 
 // runOptimize tries to optimize the container
@@ -172,7 +155,7 @@ func (c *container) runOptimize() {
 		return
 	}
 
-	numRuns := len(c.run())
+	numRuns := len(c.Data) / 2
 	avgRunLength := float64(c.Size) / float64(numRuns)
 	compressionVsBitmap := float64(numRuns*4+2) / float64(8192)
 	runDensity := float64(numRuns) / float64(c.Size)
@@ -191,7 +174,8 @@ func (c *container) runOptimize() {
 
 // runToArray converts this container from run to array
 func (c *container) runToArray() {
-	src := c.run()
+	numRuns := len(c.Data) / 2
+	srcData := c.Data
 
 	// Create new array data
 	c.Data = make([]uint16, c.Size)
@@ -200,12 +184,13 @@ func (c *container) runToArray() {
 
 	// Copy all values to the array
 	idx := 0
-	for _, r := range src {
-		for value := r[0]; value <= r[1]; value++ {
+	for i := 0; i < numRuns; i++ {
+		start, end := srcData[i*2], srcData[i*2+1]
+		for value := start; value <= end; value++ {
 			dst[idx] = value
 			idx++
-			if value == r[1] {
-				break // Prevent uint16 overflow when r[1] is 65535
+			if value == end {
+				break // Prevent uint16 overflow when end is 65535
 			}
 		}
 	}
@@ -213,18 +198,20 @@ func (c *container) runToArray() {
 
 // runToBmp converts this container from run to bitmap
 func (c *container) runToBmp() {
-	src := c.run()
+	numRuns := len(c.Data) / 2
+	srcData := c.Data
 
 	// Create bitmap data (65536 bits = 8192 bytes = 4096 uint16s)
 	c.Data = make([]uint16, 4096)
 	c.Type = typeBitmap
 	dst := c.bmp()
 
-	for _, r := range src {
-		for i := r[0]; i <= r[1]; i++ {
-			dst.Set(uint32(i))
-			if i == r[1] {
-				break // Prevent uint16 overflow when r[1] is 65535
+	for i := 0; i < numRuns; i++ {
+		start, end := srcData[i*2], srcData[i*2+1]
+		for v := start; v <= end; v++ {
+			dst.Set(uint32(v))
+			if v == end {
+				break // Prevent uint16 overflow when end is 65535
 			}
 		}
 	}

@@ -19,9 +19,9 @@ func (rb *Bitmap) Range(fn func(x uint32)) {
 			})
 
 		case typeRun:
-			runs := c.run()
-			for _, r := range runs {
-				start, end := uint32(r[0]), uint32(r[1])
+			numRuns := len(c.Data) / 2
+			for i := 0; i < numRuns; i++ {
+				start, end := uint32(c.Data[i*2]), uint32(c.Data[i*2+1])
 				for curr := start; curr <= end; curr++ {
 					fn(base | curr)
 					if curr == end {
@@ -63,9 +63,9 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 			})
 
 		case typeRun:
-			runs := c.run()
-			for _, r := range runs {
-				start, end := uint32(r[0]), uint32(r[1])
+			numRuns := len(c.Data) / 2
+			for i := 0; i < numRuns; i++ {
+				start, end := uint32(c.Data[i*2]), uint32(c.Data[i*2+1])
 				for curr := start; curr <= end; curr++ {
 					value := base | curr
 					if !f(value) {
