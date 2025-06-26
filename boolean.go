@@ -90,9 +90,9 @@ func (rb *Bitmap) andContainers(c1, c2 *container) bool {
 	case c1.Type == typeArray && c2.Type == typeBitmap:
 		return rb.arrAndBmp(c1, c2)
 	case c1.Type == typeBitmap && c2.Type == typeArray:
-		return rb.andBitmapArray(c1, c2)
+		return rb.bmpAndArr(c1, c2)
 	case c1.Type == typeBitmap && c2.Type == typeBitmap:
-		return rb.andBitmapBitmap(c1, c2)
+		return rb.bmpAndBmp(c1, c2)
 	case c1.Type == typeRun:
 		return rb.andRunContainer(c1, c2)
 	case c2.Type == typeRun:
@@ -105,10 +105,6 @@ func (rb *Bitmap) andContainers(c1, c2 *container) bool {
 // arrAndArr performs AND between two array containers
 func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 	a, b := c1.arr(), c2.arr()
-	if len(a) == 0 || len(b) == 0 {
-		return false
-	}
-
 	i, j, k := 0, 0, 0
 	for i < len(a) && j < len(b) {
 		av, bv := a[i], b[j]
@@ -132,70 +128,38 @@ func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 
 // arrAndBmp performs AND between array and bitmap containers
 func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
-	arr := c1.arr()
-	bmp := c2.bmp()
-	result := arr[:0]
+	a, b := c1.arr(), c2.bmp()
+	out := a[:0]
 
-	for _, val := range arr {
-		if bmp.Contains(uint32(val)) {
-			result = append(result, val)
+	for _, val := range a {
+		if b.Contains(uint32(val)) {
+			out = append(out, val)
 		}
 	}
 
-	if len(result) == 0 {
-		return false
-	}
-
-	c1.Data = result
-	c1.Size = uint32(len(result))
+	c1.Data = out
+	c1.Size = uint32(len(out))
 	return true
 }
 
-// andBitmapArray performs AND between bitmap and array containers
-func (rb *Bitmap) andBitmapArray(c1, c2 *container) bool {
-	// Convert bitmap to array with only intersecting values
-	bmp := c1.bmp()
-	arr := c2.arr()
+// bmpAndArr performs AND between bitmap and array containers
+func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
+	a, b := c1.bmp(), c2.arr()
+	out := make([]uint16, 0, len(b))
 
-	// Save original bitmap state before clearing
-	original := make([]uint64, len(bmp))
-	copy(original, bmp)
-
-	// Clear bitmap first
-	for i := range bmp {
-		bmp[i] = 0
-	}
-
-	count := 0
-	for _, val := range arr {
-		// Check against original bitmap state
-		blkIdx := val >> 6
-		bitIdx := val & 63
-		if int(blkIdx) < len(original) {
-			if original[blkIdx]&(uint64(1)<<bitIdx) != 0 {
-				// Set bit in cleared bitmap
-				bmp[blkIdx] |= uint64(1) << bitIdx
-				count++
-			}
+	for _, val := range b {
+		if a.Contains(uint32(val)) {
+			out = append(out, val)
 		}
 	}
 
-	if count == 0 {
-		return false
-	}
-
-	c1.Size = uint32(count)
-
-	// Convert to array if small enough
-	if count <= arrMinSize {
-		rb.bitmapToArray(c1)
-	}
-
+	c1.Data = out
+	c1.Size = uint32(len(out))
 	return true
 }
 
-// andBitmapBitmap performs AND between two bitmap containers
-func (rb *Bitmap) andBitmapBitmap(c1, c2 *container) bool {
+// bmpAndBmp performs AND between two bitmap containers
+func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
 	bmp1 := c1.bmp()
 	bmp2 := c2.bmp()
 	if bmp1 == nil || bmp2 == nil {
