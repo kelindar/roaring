@@ -32,26 +32,36 @@ func (rb *Bitmap) and(other *Bitmap) {
 // and performs efficient AND between two containers
 func (rb *Bitmap) ctrAnd(c1, c2 *container) bool {
 	c1.fork()
-	switch {
-	case c1.Type == typeArray && c2.Type == typeArray:
-		return rb.arrAndArr(c1, c2)
-	case c1.Type == typeArray && c2.Type == typeBitmap:
-		return rb.arrAndBmp(c1, c2)
-	case c1.Type == typeArray && c2.Type == typeRun:
-		return rb.arrAndRun(c1, c2)
-
-	case c1.Type == typeBitmap && c2.Type == typeArray:
-		return rb.bmpAndArr(c1, c2)
-	case c1.Type == typeBitmap && c2.Type == typeBitmap:
-		return rb.bmpAndBmp(c1, c2)
-	case c1.Type == typeBitmap && c2.Type == typeRun:
-		return rb.bmpAndRun(c1, c2)
-
-	case c1.Type == typeRun:
-		return rb.runAndCtr(c1, c2)
-	default:
-		return false
+	switch c1.Type {
+	case typeArray:
+		switch c2.Type {
+		case typeArray:
+			return rb.arrAndArr(c1, c2)
+		case typeBitmap:
+			return rb.arrAndBmp(c1, c2)
+		case typeRun:
+			return rb.arrAndRun(c1, c2)
+		}
+	case typeBitmap:
+		switch c2.Type {
+		case typeArray:
+			return rb.bmpAndArr(c1, c2)
+		case typeBitmap:
+			return rb.bmpAndBmp(c1, c2)
+		case typeRun:
+			return rb.bmpAndRun(c1, c2)
+		}
+	case typeRun:
+		switch c2.Type {
+		case typeArray:
+			return rb.runAndArr(c1, c2)
+		case typeBitmap:
+			return rb.runAndBmp(c1, c2)
+		case typeRun:
+			return rb.runAndRun(c1, c2)
+		}
 	}
+	return false
 }
 
 // arrAndArr performs AND between two array containers
@@ -124,7 +134,7 @@ func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
 		}
 	}
 
-	copy(c1.Data, out)
+	c1.Data = append(c1.Data[:0], out...)
 	c1.Size = uint32(len(c1.Data))
 	return c1.Size > 0
 }
@@ -136,7 +146,6 @@ func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
 		return false
 	}
 
-	// Perform AND operation and update container size
 	a.And(b)
 	c1.Size = uint32(a.Count())
 	return true
@@ -163,53 +172,106 @@ func (rb *Bitmap) bmpAndRun(c1, c2 *container) bool {
 	return c1.Size > 0
 }
 
-// runAndCtr performs AND between run container and other container
-func (rb *Bitmap) runAndCtr(c1, c2 *container) bool {
-	numRuns := len(c1.Data) / 2
-	newData := make([]uint16, 0, len(c1.Data))
-	var newSize uint32
+// runAndArr performs AND between run and array containers
+func (rb *Bitmap) runAndArr(c1, c2 *container) bool {
+	a, b := c1.Data, c2.Data
+	out := rb.scratch[:0]
+	size := uint32(0)
+	i, j := 0, 0
 
-	for i := 0; i < numRuns; i++ {
-		start, end := c1.Data[i*2], c1.Data[i*2+1]
-
-		// Check each value in run against other container
-		currentStart := uint16(0)
-		inRun := false
-
-		for val := start; val <= end; val++ {
-			if c2.contains(val) {
-				if !inRun {
-					currentStart = val
-					inRun = true
-				}
-			} else if inRun {
-				newData = append(newData, currentStart, val-1)
-				newSize += uint32(val-1) - uint32(currentStart) + 1
-				inRun = false
-			}
-
-			if val == end {
-				break // Prevent overflow
-			}
+	for i < len(a) && j < len(b) {
+		start, end := a[i], a[i+1]
+		for j < len(b) && b[j] < start {
+			j++
 		}
 
-		// Handle final run
-		if inRun {
-			newData = append(newData, currentStart, end)
-			newSize += uint32(end) - uint32(currentStart) + 1
+		for j < len(b) && b[j] <= end {
+			runStart := b[j]
+			j++
+			for j < len(b) && b[j] <= end && b[j] == b[j-1]+1 {
+				j++
+			}
+
+			runEnd := b[j-1]
+			out = append(out, runStart, runEnd)
+			size += uint32(runEnd) - uint32(runStart) + 1
+		}
+		i += 2
+	}
+
+	c1.Data = append(c1.Data[:0], out...)
+	c1.Size = size
+	return size > 0
+}
+
+// runAndRun performs AND between two run containers
+func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
+	a, b := c1.Data, c2.Data
+	out := rb.scratch[:0]
+	i, j := 0, 0
+	size := uint32(0)
+
+	for i < len(a) && j < len(b) {
+		s1, e1 := a[i], a[i+1]
+		s2, e2 := b[j], b[j+1]
+
+		is, ie := s1, e1
+		if s2 > is {
+			is = s2
+		}
+		if e2 < ie {
+			ie = e2
+		}
+
+		if is <= ie {
+			out = append(out, is, ie)
+			size += uint32(ie) - uint32(is) + 1
+		}
+
+		switch {
+		case e1 < e2:
+			i += 2
+		case e2 < e1:
+			j += 2
+		default:
+			i += 2
+			j += 2
 		}
 	}
 
-	if len(newData) == 0 {
-		c1.Data = c1.Data[:0]
-		c1.Size = 0
-		return false
+	c1.Data = append(c1.Data[:0], out...)
+	c1.Size = size
+	rb.scratch = out
+	return size > 0
+}
+
+// runAndBmp performs AND between run and bitmap containers
+func (rb *Bitmap) runAndBmp(c1, c2 *container) bool {
+	runs, bmp := c1.Data, c2.bmp()
+	out := rb.scratch[:0]
+	size := uint32(0)
+
+	for i := 0; i < len(runs); i += 2 {
+		for val, end := runs[i], runs[i+1]; val <= end; {
+			if !bmp.Contains(uint32(val)) {
+				val++
+				continue
+			}
+
+			start := val
+			val++
+			for val <= end && bmp.Contains(uint32(val)) {
+				val++
+			}
+			out = append(out, start, val-1)
+			size += uint32(val-1) - uint32(start) + 1
+		}
 	}
 
-	// Update container
-	c1.Data = newData
-	c1.Size = newSize
-	return c1.Size > 0
+	c1.Data = append(c1.Data[:0], out...)
+	c1.Size = size
+	rb.scratch = out
+	return size > 0
 }
 
 // AndNot performs bitwise AND NOT operation with other bitmap(s)
