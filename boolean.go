@@ -1,15 +1,5 @@
 package roaring
 
-// And performs bitwise AND operation with other bitmap(s)
-func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
-	rb.and(other)
-	for _, bm := range extra {
-		if bm != nil {
-			rb.and(bm)
-		}
-	}
-}
-
 // and performs AND with a single bitmap efficiently
 func (rb *Bitmap) and(other *Bitmap) {
 	switch {
@@ -24,8 +14,7 @@ func (rb *Bitmap) and(other *Bitmap) {
 	rb.scratch = rb.scratch[:0]
 	for i := range rb.containers {
 		c1 := &rb.containers[i]
-		hi := rb.index[i]
-		idx, exists := find16(other.index, hi)
+		idx, exists := find16(other.index, rb.index[i])
 		switch {
 		case !exists:
 			rb.scratch = append(rb.scratch, uint32(i))
@@ -37,31 +26,6 @@ func (rb *Bitmap) and(other *Bitmap) {
 	// Batch remove empty containers (in reverse order to maintain indices)
 	for i := len(rb.scratch) - 1; i >= 0; i-- {
 		rb.ctrDel(int(rb.scratch[i]))
-	}
-}
-
-// andContainers performs efficient AND between two containers
-func (c1 *container) and(c2 *container) bool {
-	c1.cowEnsureOwned()
-	switch {
-	case c1.Type == typeArray && c2.Type == typeArray:
-		return arrAndArr(c1, c2)
-	case c1.Type == typeArray && c2.Type == typeBitmap:
-		return arrAndBmp(c1, c2)
-	case c1.Type == typeArray && c2.Type == typeRun:
-		return arrAndRun(c1, c2)
-
-	case c1.Type == typeBitmap && c2.Type == typeArray:
-		return bmpAndArr(c1, c2)
-	case c1.Type == typeBitmap && c2.Type == typeBitmap:
-		return bmpAndBmp(c1, c2)
-	case c1.Type == typeBitmap && c2.Type == typeRun:
-		return bmpAndRun(c1, c2)
-
-	case c1.Type == typeRun:
-		return runAndCtr(c1, c2)
-	default:
-		return false
 	}
 }
 
@@ -105,29 +69,23 @@ func arrAndBmp(c1, c2 *container) bool {
 	return true
 }
 
-// andContainerRun performs AND between container and run container
+// arrAndRun performs AND between array and run containers
 func arrAndRun(c1, c2 *container) bool {
-	numRuns := len(c2.Data) / 2
-	arr := c1.Data
-	result := arr[:0]
+	a, b := c1.Data, c2.Data
+	out := a[:0]
 
-	for _, val := range arr {
-		// Check if value is in any run
-		for i := 0; i < numRuns; i++ {
-			start, end := c2.Data[i*2], c2.Data[i*2+1]
-			if val >= start && val <= end {
-				result = append(result, val)
+	for _, val := range a {
+		for i := 0; i < len(b)/2; i += 2 {
+			if val >= b[i*2] && val <= b[i*2+1] {
+				out = append(out, val)
 				break
 			}
 		}
 	}
 
-	c1.Data = result
-	c1.Size = uint32(len(result))
-	if c1.Size == 0 {
-		return false
-	}
-	return true
+	c1.Data = out
+	c1.Size = uint32(len(out))
+	return c1.Size > 0
 }
 
 // bmpAndArr performs AND between bitmap and array containers

@@ -23,8 +23,8 @@ type container struct {
 	Data   []uint16
 }
 
-// cowEnsureOwned ensures the container owns its data before modification
-func (c *container) cowEnsureOwned() {
+// fork ensures the container owns its data before modification
+func (c *container) fork() {
 	if c.Shared {
 		clone := make([]uint16, len(c.Data), cap(c.Data))
 		copy(clone, c.Data)
@@ -35,7 +35,7 @@ func (c *container) cowEnsureOwned() {
 
 // set sets a value in the container and returns true if the value was added (didn't exist before)
 func (c *container) set(value uint16) (ok bool) {
-	c.cowEnsureOwned()
+	c.fork()
 	switch c.Type {
 	case typeArray:
 		if ok = c.arrSet(value); ok {
@@ -55,7 +55,7 @@ func (c *container) set(value uint16) (ok bool) {
 
 // remove removes a value from the container and returns true if the value was removed (existed before)
 func (c *container) remove(value uint16) (ok bool) {
-	c.cowEnsureOwned() // Ensure we own the data before modifying
+	c.fork()
 	switch c.Type {
 	case typeArray:
 		if ok = c.arrDel(value); ok {
@@ -93,7 +93,7 @@ func (c *container) isEmpty() bool {
 
 // optimize converts the container to the most efficient representation
 func (c *container) optimize() {
-	c.cowEnsureOwned() // Ensure we own the data before modifying
+	c.fork()
 	switch c.Type {
 	case typeArray:
 		c.arrOptimize()
@@ -108,5 +108,30 @@ func (c *container) optimize() {
 func (c *container) tryOptimize() {
 	if c.Call++; c.Call%optimizeEvery == 0 {
 		c.optimize()
+	}
+}
+
+// and performs efficient AND between two containers
+func (c1 *container) and(c2 *container) bool {
+	c1.fork()
+	switch {
+	case c1.Type == typeArray && c2.Type == typeArray:
+		return arrAndArr(c1, c2)
+	case c1.Type == typeArray && c2.Type == typeBitmap:
+		return arrAndBmp(c1, c2)
+	case c1.Type == typeArray && c2.Type == typeRun:
+		return arrAndRun(c1, c2)
+
+	case c1.Type == typeBitmap && c2.Type == typeArray:
+		return bmpAndArr(c1, c2)
+	case c1.Type == typeBitmap && c2.Type == typeBitmap:
+		return bmpAndBmp(c1, c2)
+	case c1.Type == typeBitmap && c2.Type == typeRun:
+		return bmpAndRun(c1, c2)
+
+	case c1.Type == typeRun:
+		return runAndCtr(c1, c2)
+	default:
+		return false
 	}
 }

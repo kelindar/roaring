@@ -98,6 +98,16 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	return into
 }
 
+// And performs bitwise AND operation with other bitmap(s)
+func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
+	rb.and(other)
+	for _, bm := range extra {
+		if bm != nil {
+			rb.and(bm)
+		}
+	}
+}
+
 // ---------------------------------------- Container ----------------------------------------
 
 // ctrAdd inserts a container at the given position
