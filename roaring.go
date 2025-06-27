@@ -1,5 +1,7 @@
 package roaring
 
+import "unsafe"
+
 // Bitmap represents a roaring bitmap for uint32 values
 type Bitmap struct {
 	containers []container // Containers in sorted order by key
@@ -105,7 +107,7 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 // ctrFind finds the container for the given high bits (read-only, no creation)
 // Returns (index, found) where index is the insertion point if not found
 func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
-	const blockSize = 32
+	const blockSize = 64
 
 	index, n := rb.index, len(rb.index)
 	switch {
@@ -149,7 +151,15 @@ func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
 				left = mid + 1
 			default:
 				// Use optimized block search
-				return searchBlock(index, blockStart, blockEnd, hi)
+				var result int64 = -1
+				_find16(unsafe.Pointer(&index[blockStart]), hi, unsafe.Pointer(&result), uint64(blockEnd-blockStart))
+				if result >= 0 {
+					return int(result), true
+				}
+
+				return left * blockSize, false
+
+				//return searchBlock(index, blockStart, blockEnd, hi)
 			}
 		}
 
