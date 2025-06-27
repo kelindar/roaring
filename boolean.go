@@ -59,7 +59,7 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 		hi := rb.index[i]
 
 		// Check if other bitmap has a container at this key
-		idx, exists := other.ctrFind(hi)
+		idx, exists := find16(other.index, hi)
 		if !exists {
 			// Other bitmap doesn't have this container - mark for removal
 			emptyIndices = append(emptyIndices, i)

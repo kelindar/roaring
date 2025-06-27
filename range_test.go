@@ -306,7 +306,7 @@ func TestContainerTypes(t *testing.T) {
 			our, values := changeType(tt.containerType)
 
 			// Verify container type
-			idx, exists := our.ctrFind(0)
+			idx, exists := find16(our.index, 0)
 			assert.True(t, exists)
 			assert.Equal(t, tt.containerType, our.containers[idx].Type)
 
