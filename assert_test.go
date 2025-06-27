@@ -21,9 +21,17 @@ func newRun(data ...uint32) *container {
 }
 
 func newContainer(typ ctype, data ...uint32) *container {
+	var backing []uint16
+	switch typ {
+	case typeBitmap:
+		backing = make([]uint16, 4096)
+	default:
+		backing = make([]uint16, 0, len(data))
+	}
+
 	c := &container{
 		Type: typ,
-		Data: make([]uint16, 0, len(data)),
+		Data: backing,
 	}
 
 	for _, v := range data {
@@ -35,6 +43,10 @@ func newContainer(typ ctype, data ...uint32) *container {
 		case typeRun:
 			c.runSet(uint16(v))
 		}
+	}
+
+	if c.Type == typeRun {
+		c.runOptimize()
 	}
 	return c
 }

@@ -11,37 +11,34 @@ func TestAnd(t *testing.T) {
 		name   string
 		c1     *container
 		c2     *container
-		result []uint32
+		result []uint16
 	}{
-		{"empty", newArr(), newArr(), []uint32{}},
-		{"arrAndarr", newArr(1, 2, 3), newArr(1, 2, 3), []uint32{1, 2, 3}},
-		{"arrAndbmp", newArr(1, 2, 3), newBmp(1, 2, 3), []uint32{1, 2, 3}},
-		{"arrAndrun", newArr(1, 2, 3), newRun(1, 2, 3), []uint32{1, 2, 3}},
-		{"bmpAndarr", newBmp(1, 2, 3), newArr(1, 2, 3), []uint32{1, 2, 3}},
-		{"bmpAndbmp", newBmp(1, 2, 3), newBmp(1, 2, 3), []uint32{1, 2, 3}},
-		{"bmpAndrun", newBmp(1, 2, 3), newRun(1, 2, 3), []uint32{1, 2, 3}},
-		{"runAndarr", newRun(1, 2, 3), newArr(1, 2, 3), []uint32{1, 2, 3}},
-		{"runAndbmp", newRun(1, 2, 3), newBmp(1, 2, 3), []uint32{1, 2, 3}},
-		{"runAndrun", newRun(1, 2, 3), newRun(1, 2, 3), []uint32{1, 2, 3}},
+		{"empty", newArr(), newArr(), []uint16{}},
+		{"arr ∧ arr", newArr(1, 2, 3), newArr(1, 2, 3), []uint16{1, 2, 3}},
+		{"arr ∧ bmp", newArr(1, 2, 3), newBmp(1, 2, 3), []uint16{1, 2, 3}},
+		{"arr ∧ run", newArr(1, 2, 3), newRun(1, 2, 3), []uint16{1, 2, 3}},
+		{"bmp ∧ arr", newBmp(1, 2, 3), newArr(1, 2, 3), []uint16{1, 2, 3}},
+		{"bmp ∧ bmp", newBmp(1, 2, 3), newBmp(1, 2, 3), []uint16{1, 2, 3}},
+		{"bmp ∧ run", newBmp(1, 2, 3), newRun(1, 2, 3), []uint16{1, 2, 3}},
+		{"run ∧ arr", newRun(1, 2, 3), newArr(1, 2, 3), []uint16{1, 2, 3}},
+		{"run ∧ bmp", newRun(1, 2, 3), newBmp(1, 2, 3), []uint16{1, 2, 3}},
+		{"run ∧ run", newRun(1, 2, 3), newRun(1, 2, 3), []uint16{1, 2, 3}},
 	}
 
 	for _, tt := range tc {
 		t.Run(tt.name, func(t *testing.T) {
-
 			a := New()
 			a.ctrAdd(0, 0, tt.c1)
-
 			b := New()
 			b.ctrAdd(0, 0, tt.c2)
-
 			a.And(b)
 
-			var result []uint32
+			result := []uint16{}
 			a.Range(func(x uint32) {
-				result = append(result, x)
+				result = append(result, uint16(x))
 			})
 
-			assert.Equal(t, tt.result, tt.c1.Data)
+			assert.Equal(t, tt.result, result)
 		})
 	}
 }

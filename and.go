@@ -142,6 +142,7 @@ func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
 
 	c1.Data = append(c1.Data[:0], out...)
 	c1.Size = uint32(len(c1.Data))
+	c1.Type = typeArray
 	return c1.Size > 0
 }
 
