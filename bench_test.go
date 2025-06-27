@@ -225,6 +225,10 @@ func benchMath(b *testing.B, name string, gen fnShape, opOur func(dst, src *Bitm
 	data, shape := gen()
 	our, ref := random(data)
 
+	// Optimize the bitmaps
+	our.Optimize()
+	ref.RunOptimize()
+
 	b.Run(fmt.Sprintf("%s-%s", name, shape), func(b *testing.B) {
 		// Measure reference implementation speed
 		start := time.Now()
@@ -251,7 +255,6 @@ func benchMath(b *testing.B, name string, gen fnShape, opOur func(dst, src *Bitm
 		ourTime := time.Since(start)
 		f1 := float64(ourIterations) / ourTime.Seconds()
 
-		// nolint:staticcheck
 		b.N = ourIterations
 		b.ReportMetric(f1/f0*100, "%") // Speedup ratio
 	})
