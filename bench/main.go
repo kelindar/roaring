@@ -18,8 +18,8 @@ const (
 	headerSep   = "------------"
 
 	// Sampling constants
-	numSamples     = 30
-	sampleDuration = 50 * time.Millisecond
+	numSamples     = 100
+	sampleDuration = 10 * time.Millisecond
 )
 
 var (
