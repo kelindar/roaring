@@ -200,22 +200,36 @@ func (r *B) formatComparison(ourSamples, otherSamples []float64) string {
 	other := tinystat.Summarize(otherSamples)
 	if other.Mean == 0 {
 		if our.Mean > 0 {
-			return "✅ inf"
+			return "✅ +inf%"
 		}
-		return "~ 1.00x"
+		return "~ similar"
 	}
 
 	speedup := our.Mean / other.Mean
+	changePercent := (speedup - 1) * 100
 	diff := tinystat.Compare(our, other, 99)
+
+	// For non-significant changes close to zero, show "similar"
+	if !diff.Significant() && changePercent >= -2 && changePercent <= 2 {
+		return "~ similar"
+	}
+
+	var sign string
+	if changePercent > 0 {
+		sign = "+"
+	} else {
+		sign = ""
+	}
+
 	if !diff.Significant() {
-		return fmt.Sprintf("~ %.2fx (p=%.3f)", speedup, diff.PValue)
+		return fmt.Sprintf("~ %s%.0f%% (p=%.3f)", sign, changePercent, diff.PValue)
 	}
 
 	if speedup > 1 {
-		return fmt.Sprintf("✅ %.2fx (p=%.3f)", speedup, diff.PValue)
+		return fmt.Sprintf("✅ %s%.0f%% (p=%.3f)", sign, changePercent, diff.PValue)
 	}
 
-	return fmt.Sprintf("❌ %.2fx (p=%.3f)", speedup, diff.PValue)
+	return fmt.Sprintf("❌ %s%.0f%% (p=%.3f)", sign, changePercent, diff.PValue)
 }
 
 // formatTime formats nanoseconds per operation
