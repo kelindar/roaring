@@ -50,7 +50,7 @@ func arrAndArr(c1, c2 *container) bool {
 
 	c1.Data = a[:k]
 	c1.Size = uint32(len(c1.Data))
-	return true
+	return c1.Size > 0
 }
 
 // arrAndBmp performs AND between array and bitmap containers
@@ -66,7 +66,7 @@ func arrAndBmp(c1, c2 *container) bool {
 
 	c1.Data = out
 	c1.Size = uint32(len(out))
-	return true
+	return c1.Size > 0
 }
 
 // arrAndRun performs AND between array and run containers
@@ -101,49 +101,47 @@ func bmpAndArr(c1, c2 *container) bool {
 
 	c1.Data = out
 	c1.Size = uint32(len(out))
-	return true
+	return c1.Size > 0
 }
 
 // bmpAndBmp performs AND between two bitmap containers
 func bmpAndBmp(c1, c2 *container) bool {
-	bmp1 := c1.bmp()
-	bmp2 := c2.bmp()
-	if bmp1 == nil || bmp2 == nil {
+	a, b := c1.bmp(), c2.bmp()
+	if a == nil || b == nil {
 		return false
 	}
 
 	// Perform AND operation and update container size
-	bmp1.And(bmp2)
-	c1.Size = uint32(bmp1.Count())
+	a.And(b)
+	c1.Size = uint32(a.Count())
 	return true
 }
 
-// andContainerRun performs AND between container and run container
+// bmpAndRun performs AND between bitmap and run containers
 func bmpAndRun(c1, c2 *container) bool {
-	numRuns := len(c2.Data) / 2
-	bmp := c1.bmp()
-	newData := make([]uint16, 0, c1.Size)
+	a, b := c1.bmp(), c2.Data
+	out := make([]uint16, 0, c1.Size)
 
-	for i := 0; i < numRuns; i++ {
-		start, end := c2.Data[i*2], c2.Data[i*2+1]
-		for v := start; v <= end; v++ {
-			if bmp.Contains(uint32(v)) {
-				newData = append(newData, v)
+	for i := 0; i < len(b)/2; i += 2 {
+		i0, i1 := b[i*2], b[i*2+1]
+		for v := i0; v <= i1; v++ {
+			if a.Contains(uint32(v)) {
+				out = append(out, v)
 			}
-			if v == end {
+			if v == i1 {
 				break
 			}
 		}
 	}
 
-	if len(newData) == 0 {
+	if len(out) == 0 {
 		c1.Data = c1.Data[:0]
 		c1.Size = 0
 		return false
 	}
 
-	c1.Data = newData
-	c1.Size = uint32(len(newData))
+	c1.Data = out
+	c1.Size = uint32(len(out))
 	c1.Type = typeArray
 	c1.optimize()
 	return c1.Size > 0
@@ -195,7 +193,7 @@ func runAndCtr(c1, c2 *container) bool {
 	// Update container
 	c1.Data = newData
 	c1.Size = newSize
-	return true
+	return c1.Size > 0
 }
 
 // AndNot performs bitwise AND NOT operation with other bitmap(s)
