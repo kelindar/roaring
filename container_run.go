@@ -2,6 +2,7 @@ package roaring
 
 func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
 	runs := len(c.Data) >> 1 // number of (start,end) pairs
+
 	switch {
 	case runs == 0:
 		return [2]int{0, 0}, false
@@ -12,25 +13,29 @@ func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
 	}
 
 	// binary phase: shrink window to ≤4 runs
-	lo, hi := 0, runs
+	lo, hi := 0, runs // hi is exclusive
 	for hi-lo > 4 {
 		mid := (lo + hi) >> 1
-		switch {
-		case value < c.Data[mid*2]:
+		start := c.Data[mid*2]
+		if value < start {
 			hi = mid
-		case value <= c.Data[mid*2+1]:
-			return [2]int{mid, mid}, true
-		default:
-			lo = mid + 1
+			continue
 		}
+		end := c.Data[mid*2+1]
+		if value <= end { // hit
+			return [2]int{mid, mid}, true
+		}
+		lo = mid + 1
 	}
 
 	// linear phase inside one cache line
 	for i := lo; i < hi; i++ {
-		switch {
-		case value < c.Data[i*2]:
+		start := c.Data[i*2]
+		if value < start { // falls between previous end and this start
 			return [2]int{i, i}, false
-		case value <= c.Data[i*2+1]:
+		}
+		end := c.Data[i*2+1]
+		if value <= end { // inside run
 			return [2]int{i, i}, true
 		}
 	}
