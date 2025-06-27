@@ -2,44 +2,21 @@ package roaring
 
 // And performs bitwise AND operation with other bitmap(s)
 func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
-	// Handle nil inputs efficiently
 	if other == nil {
 		rb.Clear()
 		return
 	}
 
-	// Create list of valid bitmaps
-	bitmaps := make([]*Bitmap, 0, len(extra)+1)
-	bitmaps = append(bitmaps, other)
+	rb.and(other)
 	for _, bm := range extra {
-		if bm != nil && len(bm.containers) > 0 {
-			bitmaps = append(bitmaps, bm)
+		if bm != nil {
+			rb.and(bm)
 		}
-	}
-
-	// If no valid bitmaps or empty result, clear
-	if len(bitmaps) == 0 || len(rb.containers) == 0 {
-		rb.Clear()
-		return
-	}
-
-	// Single bitmap optimization
-	if len(bitmaps) == 1 {
-		rb.andSingle(bitmaps[0])
-		return
-	}
-
-	// Multiple bitmaps - use iterative approach
-	for _, bm := range bitmaps {
-		if len(rb.containers) == 0 {
-			break // Early exit
-		}
-		rb.andSingle(bm)
 	}
 }
 
-// andSingle performs AND with a single bitmap efficiently
-func (rb *Bitmap) andSingle(other *Bitmap) {
+// and performs AND with a single bitmap efficiently
+func (rb *Bitmap) and(other *Bitmap) {
 	if other == nil || len(other.containers) == 0 {
 		rb.Clear()
 		return
@@ -68,7 +45,7 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 
 		// Both bitmaps have containers at this index - perform AND
 		c2 := &other.containers[idx]
-		if !rb.andContainers(c1, c2) {
+		if !c1.and(c2) {
 			emptyIndices = append(emptyIndices, i)
 		}
 	}
@@ -80,32 +57,32 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 }
 
 // andContainers performs efficient AND between two containers
-func (rb *Bitmap) andContainers(c1, c2 *container) bool {
+func (c1 *container) and(c2 *container) bool {
 	c1.cowEnsureOwned()
 	switch {
 	case c1.Type == typeArray && c2.Type == typeArray:
-		return rb.arrAndArr(c1, c2)
+		return arrAndArr(c1, c2)
 	case c1.Type == typeArray && c2.Type == typeBitmap:
-		return rb.arrAndBmp(c1, c2)
+		return arrAndBmp(c1, c2)
 	case c1.Type == typeArray && c2.Type == typeRun:
-		return rb.arrAndRun(c1, c2)
+		return arrAndRun(c1, c2)
 
 	case c1.Type == typeBitmap && c2.Type == typeArray:
-		return rb.bmpAndArr(c1, c2)
+		return bmpAndArr(c1, c2)
 	case c1.Type == typeBitmap && c2.Type == typeBitmap:
-		return rb.bmpAndBmp(c1, c2)
+		return bmpAndBmp(c1, c2)
 	case c1.Type == typeBitmap && c2.Type == typeRun:
-		return rb.bmpAndRun(c1, c2)
+		return bmpAndRun(c1, c2)
 
 	case c1.Type == typeRun:
-		return rb.runAndCtr(c1, c2)
+		return runAndCtr(c1, c2)
 	default:
 		return false
 	}
 }
 
 // arrAndArr performs AND between two array containers
-func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
+func arrAndArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	i, j, k := 0, 0, 0
 	for i < len(a) && j < len(b) {
@@ -129,7 +106,7 @@ func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 }
 
 // arrAndBmp performs AND between array and bitmap containers
-func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
+func arrAndBmp(c1, c2 *container) bool {
 	a, b := c1.Data, c2.bmp()
 	out := a[:0]
 
@@ -145,7 +122,7 @@ func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
 }
 
 // andContainerRun performs AND between container and run container
-func (rb *Bitmap) arrAndRun(c1, c2 *container) bool {
+func arrAndRun(c1, c2 *container) bool {
 	numRuns := len(c2.Data) / 2
 	arr := c1.Data
 	result := arr[:0]
@@ -170,7 +147,7 @@ func (rb *Bitmap) arrAndRun(c1, c2 *container) bool {
 }
 
 // bmpAndArr performs AND between bitmap and array containers
-func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
+func bmpAndArr(c1, c2 *container) bool {
 	a, b := c1.bmp(), c2.Data
 	out := make([]uint16, 0, len(b))
 
@@ -186,7 +163,7 @@ func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
 }
 
 // bmpAndBmp performs AND between two bitmap containers
-func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
+func bmpAndBmp(c1, c2 *container) bool {
 	bmp1 := c1.bmp()
 	bmp2 := c2.bmp()
 	if bmp1 == nil || bmp2 == nil {
@@ -196,16 +173,11 @@ func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
 	// Perform AND operation and update container size
 	bmp1.And(bmp2)
 	c1.Size = uint32(bmp1.Count())
-
-	// Convert to array if small enough
-	if c1.Size <= arrMinSize {
-		c1.bmpToArr()
-	}
 	return true
 }
 
 // andContainerRun performs AND between container and run container
-func (rb *Bitmap) bmpAndRun(c1, c2 *container) bool {
+func bmpAndRun(c1, c2 *container) bool {
 	numRuns := len(c2.Data) / 2
 	bmp := c1.bmp()
 	newData := make([]uint16, 0, c1.Size)
@@ -236,7 +208,7 @@ func (rb *Bitmap) bmpAndRun(c1, c2 *container) bool {
 }
 
 // runAndCtr performs AND between run container and other container
-func (rb *Bitmap) runAndCtr(c1, c2 *container) bool {
+func runAndCtr(c1, c2 *container) bool {
 	numRuns := len(c1.Data) / 2
 	newData := make([]uint16, 0, len(c1.Data))
 	var newSize uint32
