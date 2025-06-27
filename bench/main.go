@@ -18,16 +18,14 @@ func main() {
 	prefix := flag.String("bench", "", "Run only benchmarks with this prefix (e.g. 'set', 'and', 'range')")
 	flag.Parse()
 
-	runner := tinybench.New("bench.json").Filter(*prefix).Start()
-
-	runOps(runner)
-	runMath(runner)
-	runRange(runner)
-
-	runner.Finish()
+	tinybench.Run(func(runner *tinybench.B) {
+		runOps(runner)
+		runMath(runner)
+		runRange(runner)
+	}, tinybench.WithReference(), tinybench.WithFilter(*prefix))
 }
 
-func runOps(runner *tinybench.Runner) {
+func runOps(b *tinybench.B) {
 	operations := []struct {
 		name  string
 		ourFn func(*rb.Bitmap, uint32)
@@ -55,7 +53,7 @@ func runOps(runner *tinybench.Runner) {
 				our, ref := randomBitmaps(data)
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
-				runner.Run(name,
+				b.Run(name,
 					func() { op.ourFn(our, data[rand.IntN(len(data))]) },
 					func() { op.refFn(ref, data[rand.IntN(len(data))]) })
 			}
@@ -63,7 +61,7 @@ func runOps(runner *tinybench.Runner) {
 	}
 }
 
-func runMath(runner *tinybench.Runner) {
+func runMath(b *tinybench.B) {
 	operations := []struct {
 		name  string
 		ourFn func(*rb.Bitmap, *rb.Bitmap)
@@ -97,7 +95,7 @@ func runMath(runner *tinybench.Runner) {
 				refSrc.RunOptimize()
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
-				runner.Run(name,
+				b.Run(name,
 					func() {
 						dst := our.Clone(nil)
 						op.ourFn(dst, ourSrc)
@@ -111,7 +109,7 @@ func runMath(runner *tinybench.Runner) {
 	}
 }
 
-func runRange(runner *tinybench.Runner) {
+func runRange(b *tinybench.B) {
 	shapes := []struct {
 		name string
 		gen  func(size int) []uint32
@@ -129,7 +127,7 @@ func runRange(runner *tinybench.Runner) {
 
 			name := fmt.Sprintf("range %s (%s) ", formatSize(size), shape.name)
 
-			runner.Run(name,
+			b.Run(name,
 				func() { our.Range(func(uint32) {}) },
 				func() { ref.Iterate(func(uint32) bool { return true }) })
 		}

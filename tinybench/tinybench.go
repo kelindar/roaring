@@ -15,6 +15,7 @@ const (
 	DefaultSamples  = 100
 	DefaultDuration = 10 * time.Millisecond
 	DefaultTableFmt = "%-20s %-12s %-12s %-18s %-18s\n"
+	DefaultFilename = "bench.json"
 )
 
 // Result represents a single benchmark result
@@ -24,61 +25,89 @@ type Result struct {
 	Timestamp int64     `json:"timestamp"`
 }
 
-// Runner manages benchmarks and handles persistence
-type Runner struct {
+// Option configures the benchmark runner
+type Option func(*config)
+
+type config struct {
 	filename string
 	filter   string
 	samples  int
 	duration time.Duration
 	tableFmt string
-	results  map[string]Result
 	showRef  bool
 }
 
-// New creates a new benchmark runner
-func New(filename string) *Runner {
-	return &Runner{
-		filename: filename,
-		samples:  DefaultSamples,
-		duration: DefaultDuration,
-		tableFmt: DefaultTableFmt,
-		results:  make(map[string]Result),
-		showRef:  true,
+// WithFile sets the filename for benchmark results
+func WithFile(filename string) Option {
+	return func(c *config) {
+		c.filename = filename
 	}
 }
 
-// Filter sets a prefix filter for benchmark names
-func (r *Runner) Filter(prefix string) *Runner {
-	r.filter = prefix
-	return r
+// WithFilter sets a prefix filter for benchmark names
+func WithFilter(prefix string) Option {
+	return func(c *config) {
+		c.filter = prefix
+	}
 }
 
-// Samples sets the number of samples to collect per benchmark
-func (r *Runner) Samples(n int) *Runner {
-	r.samples = n
-	return r
+// WithSamples sets the number of samples to collect per benchmark
+func WithSamples(n int) Option {
+	return func(c *config) {
+		c.samples = n
+	}
 }
 
-// Duration sets the duration for each sample
-func (r *Runner) Duration(d time.Duration) *Runner {
-	r.duration = d
-	return r
+// WithDuration sets the duration for each sample
+func WithDuration(d time.Duration) Option {
+	return func(c *config) {
+		c.duration = d
+	}
 }
 
-// TableFormat sets the table format string
-func (r *Runner) TableFormat(fmt string) *Runner {
-	r.tableFmt = fmt
-	return r
+// WithReference enables reference comparison column
+func WithReference() Option {
+	return func(c *config) {
+		c.showRef = true
+	}
 }
 
-// ShowReference controls whether to show reference comparison column
-func (r *Runner) ShowReference(show bool) *Runner {
-	r.showRef = show
-	return r
+// B manages benchmarks and handles persistence
+type B struct {
+	config
+}
+
+// Run executes benchmarks with the given configuration
+func Run(fn func(*B), opts ...Option) {
+	cfg := config{
+		filename: DefaultFilename,
+		samples:  DefaultSamples,
+		duration: DefaultDuration,
+		tableFmt: DefaultTableFmt,
+	}
+
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	runner := &B{config: cfg}
+	runner.printHeader()
+	fn(runner)
+}
+
+// printHeader prints the table header
+func (r *B) printHeader() {
+	if r.showRef {
+		fmt.Printf(r.tableFmt, "name", "time/op", "ops/s", "vs prev", "vs ref")
+		fmt.Printf(r.tableFmt, "--------------------", "------------", "------------", "------------------", "------------------")
+	} else {
+		fmt.Printf("%-20s %-12s %-12s %-18s\n", "name", "time/op", "ops/s", "vs prev")
+		fmt.Printf("%-20s %-12s %-12s %-18s\n", "--------------------", "------------", "------------", "------------------")
+	}
 }
 
 // shouldRun checks if a benchmark matches the filter
-func (r *Runner) shouldRun(name string) bool {
+func (r *B) shouldRun(name string) bool {
 	if r.filter == "" {
 		return true
 	}
@@ -86,7 +115,7 @@ func (r *Runner) shouldRun(name string) bool {
 }
 
 // benchmark runs a function repeatedly and returns performance samples
-func (r *Runner) benchmark(fn func()) []float64 {
+func (r *B) benchmark(fn func()) []float64 {
 	samples := make([]float64, r.samples)
 	for i := range samples {
 		start := time.Now()
@@ -101,7 +130,7 @@ func (r *Runner) benchmark(fn func()) []float64 {
 }
 
 // loadResults loads previous results from JSON file
-func (r *Runner) loadResults() map[string]Result {
+func (r *B) loadResults() map[string]Result {
 	data, err := os.ReadFile(r.filename)
 	if err != nil {
 		return make(map[string]Result)
@@ -115,21 +144,8 @@ func (r *Runner) loadResults() map[string]Result {
 	return results
 }
 
-// saveResults saves current results to JSON file
-func (r *Runner) saveResults() {
-	data, err := json.MarshalIndent(r.results, "", "  ")
-	if err != nil {
-		fmt.Printf("Error marshaling results: %v\n", err)
-		return
-	}
-
-	if err := os.WriteFile(r.filename, data, 0644); err != nil {
-		fmt.Printf("Error writing results file: %v\n", err)
-	}
-}
-
 // saveResult saves a single result incrementally
-func (r *Runner) saveResult(result Result) {
+func (r *B) saveResult(result Result) {
 	// Load current results to merge with
 	current := r.loadResults()
 	current[result.Name] = result
@@ -147,7 +163,7 @@ func (r *Runner) saveResult(result Result) {
 }
 
 // formatResult formats statistical comparison between samples
-func (r *Runner) formatResult(ourSamples, refSamples []float64) string {
+func (r *B) formatResult(ourSamples, refSamples []float64) string {
 	our := tinystat.Summarize(ourSamples)
 	ref := tinystat.Summarize(refSamples)
 	if ref.Mean == 0 {
@@ -171,7 +187,7 @@ func (r *Runner) formatResult(ourSamples, refSamples []float64) string {
 }
 
 // formatDelta formats comparison between current and previous runs
-func (r *Runner) formatDelta(current, previous Result) string {
+func (r *B) formatDelta(current, previous Result) string {
 	if len(previous.Samples) == 0 {
 		return "new"
 	}
@@ -199,7 +215,7 @@ func (r *Runner) formatDelta(current, previous Result) string {
 }
 
 // formatTime formats nanoseconds per operation
-func (r *Runner) formatTime(nsPerOp float64) string {
+func (r *B) formatTime(nsPerOp float64) string {
 	if nsPerOp >= 1000000 {
 		return fmt.Sprintf("%.1fms", nsPerOp/1000000)
 	}
@@ -207,7 +223,7 @@ func (r *Runner) formatTime(nsPerOp float64) string {
 }
 
 // formatOps formats operations per second
-func (r *Runner) formatOps(opsPerSec float64) string {
+func (r *B) formatOps(opsPerSec float64) string {
 	if opsPerSec >= 1000000 {
 		return fmt.Sprintf("%.1fM", opsPerSec/1000000)
 	}
@@ -217,22 +233,10 @@ func (r *Runner) formatOps(opsPerSec float64) string {
 	return fmt.Sprintf("%.0f", opsPerSec)
 }
 
-// Start begins a benchmark session and prints the header
-func (r *Runner) Start() *Runner {
-	if r.showRef {
-		fmt.Printf(r.tableFmt, "name", "time/op", "ops/s", "vs prev", "vs ref")
-		fmt.Printf(r.tableFmt, "--------------------", "------------", "------------", "------------------", "------------------")
-	} else {
-		fmt.Printf("%-20s %-12s %-12s %-18s\n", "name", "time/op", "ops/s", "vs prev")
-		fmt.Printf("%-20s %-12s %-12s %-18s\n", "--------------------", "------------", "------------", "------------------")
-	}
-	return r
-}
-
 // Run executes a benchmark with optional reference comparison
-func (r *Runner) Run(name string, ourFn func(), refFn ...func()) *Runner {
+func (r *B) Run(name string, ourFn func(), refFn ...func()) {
 	if !r.shouldRun(name) {
-		return r
+		return
 	}
 
 	// Load previous results for delta comparison
@@ -282,11 +286,4 @@ func (r *Runner) Run(name string, ourFn func(), refFn ...func()) *Runner {
 
 	// Save result incrementally
 	r.saveResult(result)
-
-	return r
-}
-
-// Finish completes the benchmark session
-func (r *Runner) Finish() {
-	// Results are already saved incrementally, nothing more to do
 }
