@@ -119,8 +119,18 @@ func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
 		return 0, true
 	case hi == index[n-1]:
 		return n - 1, true
+	case n <= 16:
+		// Simple linear search for small arrays
+		for i, key := range index {
+			switch {
+			case key == hi:
+				return i, true
+			case key > hi:
+				return i, false
+			}
+		}
+		return n, false
 	default:
-
 		// Binary search for the correct block
 		numBlocks := (n + blockSize - 1) / blockSize
 		left, right := 0, numBlocks-1
@@ -138,22 +148,51 @@ func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
 			case hi > index[blockEnd-1]:
 				left = mid + 1
 			default:
-
-				// Linear search within the block
-				for i := blockStart; i < blockEnd; i++ {
-					switch {
-					case index[i] == hi:
-						return i, true
-					case index[i] > hi:
-						return i, false
-					}
-				}
-				return blockEnd, false
+				// Use optimized block search
+				return searchBlock(index, blockStart, blockEnd, hi)
 			}
 		}
 
 		return left * blockSize, false
 	}
+}
+
+// searchBlock performs an optimized linear search within a block
+// Returns (index, found) for the key within the block range
+func searchBlock(keys []uint16, start, end int, target uint16) (int, bool) {
+	for i := start; i < end; {
+		remaining := end - i
+		switch {
+		case remaining >= 4:
+			if keys[i] >= target {
+				return i, keys[i] == target
+			}
+			if keys[i+1] >= target {
+				return i + 1, keys[i+1] == target
+			}
+			if keys[i+2] >= target {
+				return i + 2, keys[i+2] == target
+			}
+			if keys[i+3] >= target {
+				return i + 3, keys[i+3] == target
+			}
+			i += 4
+		case remaining >= 2:
+			if keys[i] >= target {
+				return i, keys[i] == target
+			}
+			if keys[i+1] >= target {
+				return i + 1, keys[i+1] == target
+			}
+			i += 2
+		default:
+			if keys[i] >= target {
+				return i, keys[i] == target
+			}
+			i++
+		}
+	}
+	return end, false
 }
 
 // ctrAdd inserts a container at the given position
