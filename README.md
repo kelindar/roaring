@@ -8,9 +8,9 @@
 <a href="https://coveralls.io/github/kelindar/roaring"><img src="https://coveralls.io/repos/github/kelindar/roaring/badge.svg" alt="Coverage"></a>
 </p>
 
-**High-Performance Roaring Bitmaps for Go**
+## Roaring: Roaring Bitmap for Go
 
-This library provides a fast, memory-efficient, and idiomatic Go implementation of [Roaring Bitmaps](https://roaringbitmap.org/), a compressed bitmap data structure for sets of 32-bit integers. It is designed for high-throughput analytics, set operations, and efficient serialization. While most of you should probably use [the original, well maintained implementation](https://github.com/RoaringBitmap/roaring), this implementation uses [https://github.com/kelindar/bitmap](kelindar/bitmap) for its dense implementation, and tries to optimize `AND`/`AND NOT`/`OR`,`XOR` operations. 
+This library provides a fast, memory-efficient Go implementation of [roaring bitmaps](https://roaringbitmap.org/), a compressed bitmap data structure for sets of 32-bit integers. It is designed for high-throughput analytics, set operations, and efficient serialization. While most of you should probably use [the original, well maintained implementation](https://github.com/RoaringBitmap/roaring), this implementation uses [kelindar/bitmap](https://github.com/kelindar/bitmap) for its dense implementation, and tries to optimize `AND`/`AND NOT`/`OR`,`XOR` operations. 
 
 - **High Performance:** Optimized for fast set operations (AND, OR, XOR, AND NOT) and iteration.
 - **Memory Efficient:** Uses containerization and compression for sparse and dense data.
@@ -24,7 +24,7 @@ This library provides a fast, memory-efficient, and idiomatic Go implementation 
 
 **Not For:**
 
-- ❌ If you need a mature, well tested and interoperable implementation.
+- ❌ If you need a mature, and interoperable implementation.
 - ❌ Sets of non-integer or non-uint32 data.
 
 ## Quick Start
