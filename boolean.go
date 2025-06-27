@@ -2,11 +2,6 @@ package roaring
 
 // And performs bitwise AND operation with other bitmap(s)
 func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
-	if other == nil {
-		rb.Clear()
-		return
-	}
-
 	rb.and(other)
 	for _, bm := range extra {
 		if bm != nil {
@@ -17,42 +12,31 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 
 // and performs AND with a single bitmap efficiently
 func (rb *Bitmap) and(other *Bitmap) {
-	if other == nil || len(other.containers) == 0 {
+	switch {
+	case other == nil || len(other.containers) == 0:
 		rb.Clear()
 		return
-	}
-
-	// If this bitmap is empty, result is empty
-	if len(rb.containers) == 0 {
+	case len(rb.containers) == 0:
 		return
 	}
 
-	// Track containers that become empty for batch removal
-	emptyIndices := make([]int, 0, 8)
-
 	// Iterate through all containers in this bitmap
+	rb.scratch = rb.scratch[:0]
 	for i := range rb.containers {
 		c1 := &rb.containers[i]
 		hi := rb.index[i]
-
-		// Check if other bitmap has a container at this key
 		idx, exists := find16(other.index, hi)
-		if !exists {
-			// Other bitmap doesn't have this container - mark for removal
-			emptyIndices = append(emptyIndices, i)
-			continue
-		}
-
-		// Both bitmaps have containers at this index - perform AND
-		c2 := &other.containers[idx]
-		if !c1.and(c2) {
-			emptyIndices = append(emptyIndices, i)
+		switch {
+		case !exists:
+			rb.scratch = append(rb.scratch, uint32(i))
+		case !c1.and(&other.containers[idx]):
+			rb.scratch = append(rb.scratch, uint32(i))
 		}
 	}
 
 	// Batch remove empty containers (in reverse order to maintain indices)
-	for i := len(emptyIndices) - 1; i >= 0; i-- {
-		rb.ctrDel(emptyIndices[i])
+	for i := len(rb.scratch) - 1; i >= 0; i-- {
+		rb.ctrDel(int(rb.scratch[i]))
 	}
 }
 
