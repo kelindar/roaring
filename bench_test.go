@@ -10,17 +10,17 @@ import (
 )
 
 func BenchmarkOps(b *testing.B) {
-	benchAll(b, "set", func(rb *Bitmap, v uint32) {
+	benchOpsAll(b, "set", func(rb *Bitmap, v uint32) {
 		rb.Set(v)
 	}, func(rb *roaring.Bitmap, v uint32) {
 		rb.Add(v)
 	})
-	benchAll(b, "has", func(rb *Bitmap, v uint32) {
+	benchOpsAll(b, "has", func(rb *Bitmap, v uint32) {
 		rb.Contains(v)
 	}, func(rb *roaring.Bitmap, v uint32) {
 		rb.Contains(v)
 	})
-	benchAll(b, "del", func(rb *Bitmap, v uint32) {
+	benchOpsAll(b, "del", func(rb *Bitmap, v uint32) {
 		rb.Remove(v)
 	}, func(rb *roaring.Bitmap, v uint32) {
 		rb.Remove(v)
@@ -35,12 +35,30 @@ func BenchmarkRange(b *testing.B) {
 	}
 }
 
-func BenchmarkAnd(b *testing.B) {
-	for _, size := range []int{1000, 1000000} {
-		for _, shape := range []fnShape{dataSeq(size, 0), dataRand(size, uint32(size)), dataSparse(size), dataDense(size)} {
-			benchAnd(b, fmt.Sprintf("and-%d", size), shape)
-		}
-	}
+func BenchmarkMath(b *testing.B) {
+	benchMathAll(b, "and", dataRand(1e6, 1e6), func(dst, src *Bitmap) {
+		dst.And(src)
+	}, func(dst, src *roaring.Bitmap) {
+		dst.And(src)
+	})
+
+	benchMathAll(b, "or", dataRand(1e6, 1e6), func(dst, src *Bitmap) {
+		dst.Or(src)
+	}, func(dst, src *roaring.Bitmap) {
+		dst.Or(src)
+	})
+
+	benchMathAll(b, "xor", dataRand(1e6, 1e6), func(dst, src *Bitmap) {
+		dst.Xor(src)
+	}, func(dst, src *roaring.Bitmap) {
+		dst.Xor(src)
+	})
+
+	benchMathAll(b, "andnot", dataRand(1e6, 1e6), func(dst, src *Bitmap) {
+		dst.AndNot(src)
+	}, func(dst, src *roaring.Bitmap) {
+		dst.AndNot(src)
+	})
 }
 
 func BenchmarkClone(b *testing.B) {
@@ -93,10 +111,18 @@ func benchRange(b *testing.B, name string, gen fnShape) {
 	})
 }
 
-func benchAll(b *testing.B, name string, fn func(rb *Bitmap, v uint32), fnRef func(rb *roaring.Bitmap, v uint32)) {
+func benchOpsAll(b *testing.B, name string, fn func(rb *Bitmap, v uint32), fnRef func(rb *roaring.Bitmap, v uint32)) {
 	for _, size := range []int{1000, 1000000} {
 		for _, shape := range []fnShape{dataSeq(size, 0), dataRand(size, uint32(size)), dataSparse(size), dataDense(size)} {
 			bench(b, fmt.Sprintf("%s-%d", name, size), shape, fn, fnRef)
+		}
+	}
+}
+
+func benchMathAll(b *testing.B, name string, gen fnShape, opOur func(dst, src *Bitmap), opRef func(dst, src *roaring.Bitmap)) {
+	for _, size := range []int{1000, 1000000} {
+		for _, shape := range []fnShape{dataSeq(size, 0), dataRand(size, uint32(size)), dataSparse(size), dataDense(size)} {
+			benchMath(b, fmt.Sprintf("%s-%d", name, size), shape, opOur, opRef)
 		}
 	}
 }
@@ -194,8 +220,8 @@ func dataDense(size int) fnShape {
 	}
 }
 
-// benchAnd runs a benchmark for the And operation
-func benchAnd(b *testing.B, name string, gen fnShape) {
+// benchMath runs a benchmark for the math operation
+func benchMath(b *testing.B, name string, gen fnShape, opOur func(dst, src *Bitmap), opRef func(dst, src *roaring.Bitmap)) {
 	data, shape := gen()
 	our, ref := random(data)
 
@@ -205,7 +231,7 @@ func benchAnd(b *testing.B, name string, gen fnShape) {
 		refIterations := 0
 		for time.Since(start) < time.Second {
 			refDst := ref.Clone()
-			refDst.And(ref)
+			opRef(refDst, ref)
 			refIterations++
 		}
 		refTime := time.Since(start)
@@ -219,12 +245,13 @@ func benchAnd(b *testing.B, name string, gen fnShape) {
 		ourIterations := 0
 		for time.Since(start) < time.Second {
 			ourClone1 := our.Clone(nil)
-			ourClone1.And(our)
+			opOur(ourClone1, our)
 			ourIterations++
 		}
 		ourTime := time.Since(start)
 		f1 := float64(ourIterations) / ourTime.Seconds()
 
+		// nolint:staticcheck
 		b.N = ourIterations
 		b.ReportMetric(f1/f0*100, "%") // Speedup ratio
 	})
