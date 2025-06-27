@@ -120,30 +120,21 @@ func bmpAndBmp(c1, c2 *container) bool {
 // bmpAndRun performs AND between bitmap and run containers
 func bmpAndRun(c1, c2 *container) bool {
 	a, b := c1.bmp(), c2.Data
-	out := make([]uint16, 0, c1.Size)
-
-	for i := 0; i < len(b)/2; i += 2 {
-		i0, i1 := b[i*2], b[i*2+1]
-		for v := i0; v <= i1; v++ {
-			if a.Contains(uint32(v)) {
-				out = append(out, v)
-			}
-			if v == i1 {
-				break
-			}
+	i, count := 0, 0
+	a.Filter(func(x uint32) bool {
+		switch {
+		case x < uint32(b[i*2]):
+			return false
+		case x > uint32(b[i*2+1]):
+			i++
+			return false
+		default:
+			count++
+			return true
 		}
-	}
+	})
 
-	if len(out) == 0 {
-		c1.Data = c1.Data[:0]
-		c1.Size = 0
-		return false
-	}
-
-	c1.Data = out
-	c1.Size = uint32(len(out))
-	c1.Type = typeArray
-	c1.optimize()
+	c1.Size = uint32(count)
 	return c1.Size > 0
 }
 
