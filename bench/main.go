@@ -8,13 +8,18 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/codahale/tinystat"
 	rb "github.com/kelindar/roaring"
 )
 
 const (
 	// Table formatting constants
-	tableFormat = "%-16s %-6s %-12s %-12s %-12s\n"
+	tableFormat = "%-16s %-6s %-12s %-12s %-18s\n"
 	headerSep   = "------------"
+
+	// Sampling constants
+	numSamples     = 30
+	sampleDuration = 50 * time.Millisecond
 )
 
 var (
@@ -40,8 +45,8 @@ type BenchRunner struct {
 }
 
 func (br *BenchRunner) printHeader() {
-	fmt.Printf(tableFormat, "name", "size", "time/op", "ops/s", "speedup")
-	fmt.Printf(tableFormat, "----------------", "------", headerSep, headerSep, headerSep)
+	fmt.Printf(tableFormat, "name", "size", "time/op", "ops/s", "result")
+	fmt.Printf(tableFormat, "----------------", "------", headerSep, headerSep, "------------------")
 }
 
 func (br *BenchRunner) shouldRun(name string) bool {
@@ -83,18 +88,19 @@ func (br *BenchRunner) runOps() {
 				our, ref := br.randomBitmaps(data)
 
 				// Measure reference performance
-				refOps := br.benchOp(data, func(v uint32) { op.refFn(ref, v) })
+				refSamples := br.benchOp(data, func(v uint32) { op.refFn(ref, v) })
 
 				// Measure our performance
-				ourOps := br.benchOp(data, func(v uint32) { op.ourFn(our, v) })
+				ourSamples := br.benchOp(data, func(v uint32) { op.ourFn(our, v) })
 
 				// Calculate metrics
-				nsPerOp := 1e9 / ourOps
-				speedup := ourOps / refOps
+				ourMeanOps := tinystat.Summarize(ourSamples).Mean
+				nsPerOp := 1e9 / ourMeanOps
+				result := br.formatResult(ourSamples, refSamples)
 
 				fmt.Printf(tableFormat,
 					fmt.Sprintf("%s (%s)", op.name, shape.name), br.formatSize(size),
-					br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourOps/1e6), br.formatSpeedup(speedup))
+					br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps/1e6), result)
 			}
 		}
 	}
@@ -135,18 +141,19 @@ func (br *BenchRunner) runMath() {
 				ref.RunOptimize()
 
 				// Measure reference performance
-				refOps := br.benchMathOpRef(ref, op.refFn)
+				refSamples := br.benchMathOpRef(ref, op.refFn)
 
 				// Measure our performance
-				ourOps := br.benchMathOpOur(our, op.ourFn)
+				ourSamples := br.benchMathOpOur(our, op.ourFn)
 
 				// Calculate metrics
-				nsPerOp := 1e9 / ourOps
-				speedup := ourOps / refOps
+				ourMeanOps := tinystat.Summarize(ourSamples).Mean
+				nsPerOp := 1e9 / ourMeanOps
+				result := br.formatResult(ourSamples, refSamples)
 
 				fmt.Printf(tableFormat,
 					fmt.Sprintf("%s (%s)", op.name, shape.name), br.formatSize(size),
-					br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourOps/1e6), br.formatSpeedup(speedup))
+					br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps/1e6), result)
 			}
 		}
 	}
@@ -173,30 +180,48 @@ func (br *BenchRunner) runRange() {
 			our, ref := br.randomBitmaps(data)
 
 			// Measure reference performance using Iterate
-			refOps := br.benchRange(func() { ref.Iterate(func(uint32) bool { return true }) })
+			refSamples := br.benchRange(func() { ref.Iterate(func(uint32) bool { return true }) })
 
 			// Measure our performance using Range
-			ourOps := br.benchRange(func() { our.Range(func(uint32) {}) })
+			ourSamples := br.benchRange(func() { our.Range(func(uint32) {}) })
 
 			// Calculate metrics
-			nsPerOp := 1e9 / (ourOps * float64(our.Count()))
-			speedup := ourOps / refOps
+			ourMeanOps := tinystat.Summarize(ourSamples).Mean
+			nsPerOp := 1e9 / (ourMeanOps * float64(our.Count()))
+			result := br.formatResult(refSamples, ourSamples)
 
 			fmt.Printf(tableFormat,
 				fmt.Sprintf("range (%s)", shape.name), br.formatSize(size),
-				br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourOps*float64(our.Count())/1e6), br.formatSpeedup(speedup))
+				br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps*float64(our.Count())/1e6), result)
 		}
 	}
 }
 
 // Helper functions for benchmarking
 
-func (br *BenchRunner) formatSpeedup(speedup float64) string {
-	percentage := speedup * 100
-	if percentage >= 100 {
-		return fmt.Sprintf("✅ %6.1f%%", percentage)
+// formatResult performs a Welch's t-test on the two samples and returns a
+// formatted string.
+func (br *BenchRunner) formatResult(ourSamples, refSamples []float64) string {
+	our := tinystat.Summarize(ourSamples)
+	ref := tinystat.Summarize(refSamples)
+	if ref.Mean == 0 {
+		if our.Mean > 0 {
+			return "✅ inf"
+		}
+		return "~ 1.00x"
 	}
-	return fmt.Sprintf("❌ %6.1f%%", percentage)
+
+	speedup := our.Mean / ref.Mean
+	diff := tinystat.Compare(our, ref, 95)
+	if !diff.Significant() {
+		return fmt.Sprintf("~ %.2fx (p=%.3f)", speedup, diff.PValue)
+	}
+
+	if speedup > 1 {
+		return fmt.Sprintf("✅ %.2fx (p=%.3f)", speedup, diff.PValue)
+	}
+
+	return fmt.Sprintf("❌ %.2fx (p=%.3f)", speedup, diff.PValue)
 }
 
 func (br *BenchRunner) formatSize(size int) string {
@@ -216,48 +241,64 @@ func (br *BenchRunner) formatTime(nsPerOp float64) string {
 	return fmt.Sprintf("%.1fns", nsPerOp)
 }
 
-func (br *BenchRunner) benchOp(data []uint32, fn func(uint32)) float64 {
-	start := time.Now()
-	ops := 0
-	for time.Since(start) < time.Second {
-		for _, v := range data {
-			fn(v)
+func (br *BenchRunner) benchOp(data []uint32, fn func(uint32)) []float64 {
+	samples := make([]float64, numSamples)
+	for i := range samples {
+		start := time.Now()
+		ops := 0
+		for time.Since(start) < sampleDuration {
+			for _, v := range data {
+				fn(v)
+				ops++
+			}
+		}
+		samples[i] = float64(ops) / time.Since(start).Seconds()
+	}
+	return samples
+}
+
+func (br *BenchRunner) benchMathOpOur(bm *rb.Bitmap, fn func(dst, src *rb.Bitmap)) []float64 {
+	samples := make([]float64, numSamples)
+	for i := range samples {
+		start := time.Now()
+		ops := 0
+		for time.Since(start) < sampleDuration {
+			clone := bm.Clone(nil)
+			fn(clone, bm)
 			ops++
 		}
+		samples[i] = float64(ops) / time.Since(start).Seconds()
 	}
-	return float64(ops) / time.Since(start).Seconds()
+	return samples
 }
 
-func (br *BenchRunner) benchMathOpOur(bm *rb.Bitmap, fn func(dst, src *rb.Bitmap)) float64 {
-	start := time.Now()
-	ops := 0
-	for time.Since(start) < time.Second {
-		clone := bm.Clone(nil)
-		fn(clone, bm)
-		ops++
+func (br *BenchRunner) benchMathOpRef(bm *roaring.Bitmap, fn func(dst, src *roaring.Bitmap)) []float64 {
+	samples := make([]float64, numSamples)
+	for i := range samples {
+		start := time.Now()
+		ops := 0
+		for time.Since(start) < sampleDuration {
+			clone := bm.Clone()
+			fn(clone, bm)
+			ops++
+		}
+		samples[i] = float64(ops) / time.Since(start).Seconds()
 	}
-	return float64(ops) / time.Since(start).Seconds()
+	return samples
 }
 
-func (br *BenchRunner) benchMathOpRef(bm *roaring.Bitmap, fn func(dst, src *roaring.Bitmap)) float64 {
-	start := time.Now()
-	ops := 0
-	for time.Since(start) < time.Second {
-		clone := bm.Clone()
-		fn(clone, bm)
-		ops++
+func (br *BenchRunner) benchRange(fn func()) []float64 {
+	samples := make([]float64, numSamples)
+	for i := range samples {
+		start := time.Now()
+		ops := 0
+		for time.Since(start) < sampleDuration {
+			fn()
+			ops++
+		}
+		samples[i] = float64(ops) / time.Since(start).Seconds()
 	}
-	return float64(ops) / time.Since(start).Seconds()
-}
-
-func (br *BenchRunner) benchRange(fn func()) float64 {
-	start := time.Now()
-	ops := 0
-	for time.Since(start) < time.Second {
-		fn()
-		ops++
-	}
-	return float64(ops) / time.Since(start).Seconds()
+	return samples
 }
 
 // Data generators
