@@ -8,6 +8,37 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func newArr(data ...uint32) *container {
+	return newContainer(typeArray, data...)
+}
+
+func newBmp(data ...uint32) *container {
+	return newContainer(typeBitmap, data...)
+}
+
+func newRun(data ...uint32) *container {
+	return newContainer(typeRun, data...)
+}
+
+func newContainer(typ ctype, data ...uint32) *container {
+	c := &container{
+		Type: typ,
+		Data: make([]uint16, 0, len(data)),
+	}
+
+	for _, v := range data {
+		switch c.Type {
+		case typeArray:
+			c.arrSet(uint16(v))
+		case typeBitmap:
+			c.bmpSet(uint16(v))
+		case typeRun:
+			c.runSet(uint16(v))
+		}
+	}
+	return c
+}
+
 // ---------------------------------------- Test Helpers ----------------------------------------
 
 // testPair creates both our bitmap and reference bitmap with same data

@@ -108,13 +108,19 @@ func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
 func (rb *Bitmap) arrAndRun(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	out := a[:0]
+	i, j := 0, 0
 
-	for _, val := range a {
-		for i := 0; i < len(b)/2; i += 2 {
-			if val >= b[i*2] && val <= b[i*2+1] {
-				out = append(out, val)
-				break
-			}
+	for i < len(a) && j < len(b) {
+		val := a[i]
+		start, end := b[j], b[j+1]
+		switch {
+		case val < start:
+			i++
+		case val > end:
+			j += 2
+		default: // val >= start && val <= end
+			out = append(out, val)
+			i++
 		}
 	}
 
@@ -176,7 +182,6 @@ func (rb *Bitmap) bmpAndRun(c1, c2 *container) bool {
 func (rb *Bitmap) runAndArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	out := rb.scratch[:0]
-	size := uint32(0)
 	i, j := 0, 0
 
 	for i < len(a) && j < len(b) {
@@ -186,22 +191,16 @@ func (rb *Bitmap) runAndArr(c1, c2 *container) bool {
 		}
 
 		for j < len(b) && b[j] <= end {
-			runStart := b[j]
+			out = append(out, b[j])
 			j++
-			for j < len(b) && b[j] <= end && b[j] == b[j-1]+1 {
-				j++
-			}
-
-			runEnd := b[j-1]
-			out = append(out, runStart, runEnd)
-			size += uint32(runEnd) - uint32(runStart) + 1
 		}
 		i += 2
 	}
 
 	c1.Data = append(c1.Data[:0], out...)
-	c1.Size = size
-	return size > 0
+	c1.Size = uint32(len(out))
+	c1.Type = typeArray
+	return c1.Size > 0
 }
 
 // runAndRun performs AND between two run containers
@@ -272,19 +271,4 @@ func (rb *Bitmap) runAndBmp(c1, c2 *container) bool {
 	c1.Size = size
 	rb.scratch = out
 	return size > 0
-}
-
-// AndNot performs bitwise AND NOT operation with other bitmap(s)
-func (rb *Bitmap) AndNot(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
-}
-
-// Or performs bitwise OR operation with other bitmap(s)
-func (rb *Bitmap) Or(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
-}
-
-// Xor performs bitwise XOR operation with other bitmap(s)
-func (rb *Bitmap) Xor(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
 }
