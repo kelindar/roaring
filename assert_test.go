@@ -8,6 +8,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func bitmapWith(c *container) (*Bitmap, []uint16) {
+	v := New()
+	v.ctrAdd(0, 0, c)
+	return v, valuesOf(v)
+}
+
+func valuesOf(v *Bitmap) []uint16 {
+	out := []uint16{}
+	v.Range(func(x uint32) {
+		out = append(out, uint16(x))
+	})
+	return out
+}
+
 func newArr(data ...uint32) *container {
 	return newContainer(typeArray, data...)
 }

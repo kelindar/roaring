@@ -84,18 +84,14 @@ func TestAnd(t *testing.T) {
 
 	for _, tt := range tc {
 		t.Run(tt.name, func(t *testing.T) {
-			a := New()
-			a.ctrAdd(0, 0, tt.c1)
-			b := New()
-			b.ctrAdd(0, 0, tt.c2)
+			a, _ := bitmapWith(tt.c1)
+			b, bv := bitmapWith(tt.c2)
+
 			a.And(b)
 
-			result := []uint16{}
-			a.Range(func(x uint32) {
-				result = append(result, uint16(x))
-			})
-
-			assert.Equal(t, tt.result, result)
+			// Assert the result is correct
+			assert.Equal(t, tt.result, valuesOf(a))
+			assert.Equal(t, bv, valuesOf(b))
 		})
 	}
 }
