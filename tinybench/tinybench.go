@@ -139,7 +139,7 @@ func (r *B) benchmark(fn func()) (samples []float64, allocs []float64) {
 		runtime.ReadMemStats(&m2)
 
 		opsPerSec := float64(ops) / elapsed.Seconds()
-		allocsPerOp := float64(m2.HeapAlloc-m1.HeapAlloc) / float64(ops)
+		allocsPerOp := float64(m2.Mallocs-m1.Mallocs) / float64(ops)
 
 		samples = append(samples, opsPerSec)
 		allocs = append(allocs, allocsPerOp)
@@ -147,13 +147,15 @@ func (r *B) benchmark(fn func()) (samples []float64, allocs []float64) {
 	return samples, allocs
 }
 
-// formatAllocs formats heap allocations per operation
+// formatAllocs formats number of allocations per operation
 func (r *B) formatAllocs(allocsPerOp float64) string {
 	switch {
 	case allocsPerOp >= 1000:
 		return fmt.Sprintf("%.1fK", allocsPerOp/1000)
-	default:
+	case allocsPerOp >= 1:
 		return fmt.Sprintf("%.0f", allocsPerOp)
+	default:
+		return "0"
 	}
 }
 
@@ -207,7 +209,7 @@ func (r *B) formatComparison(ourSamples, otherSamples []float64) string {
 
 	speedup := our.Mean / other.Mean
 	changePercent := (speedup - 1) * 100
-	diff := tinystat.Compare(our, other, 99)
+	diff := tinystat.Compare(our, other, 99.9)
 
 	// For non-significant changes close to zero, show "similar"
 	if !diff.Significant() && changePercent >= -2 && changePercent <= 2 {
@@ -234,10 +236,14 @@ func (r *B) formatComparison(ourSamples, otherSamples []float64) string {
 
 // formatTime formats nanoseconds per operation
 func (r *B) formatTime(nsPerOp float64) string {
-	if nsPerOp >= 1000000 {
-		return fmt.Sprintf("%.1fms", nsPerOp/1000000)
+	switch {
+	case nsPerOp >= 1000000:
+		return fmt.Sprintf("%.1f ms", nsPerOp/1000000)
+	case nsPerOp >= 1000:
+		return fmt.Sprintf("%.1f µs", nsPerOp/1000)
+	default:
+		return fmt.Sprintf("%.1f ns", nsPerOp)
 	}
-	return fmt.Sprintf("%.1fns", nsPerOp)
 }
 
 // formatOps formats operations per second
