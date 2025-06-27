@@ -15,19 +15,17 @@ This library provides a fast, memory-efficient, and idiomatic Go implementation 
 - **High Performance:** Optimized for fast set operations (AND, OR, XOR, AND NOT) and iteration.
 - **Memory Efficient:** Uses containerization and compression for sparse and dense data.
 - **Go Idioms:** Clean, concise API with Go-style patterns and minimal dependencies.
-- **Serialization:** Efficient streaming and byte-level serialization/deserialization.
 
-## Use When
+**Use When**
 
 - ✅ You need to store and manipulate large sets of 32-bit integers efficiently.
 - ✅ You want fast set operations (union, intersection, difference, symmetric difference).
-- ✅ You need to serialize/deserialize bitmaps for storage or network transfer.
 - ✅ You want a dependency-free, pure Go implementation.
 
 **Not For:**
 
+- ❌ If you need a mature, well tested and interoperable implementation.
 - ❌ Sets of non-integer or non-uint32 data.
-- ❌ Use cases requiring persistent storage (use a DB or file format for that).
 
 ## Quick Start
 
