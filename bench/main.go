@@ -6,8 +6,8 @@ import (
 	"math/rand/v2"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/kelindar/bench"
 	rb "github.com/kelindar/roaring"
-	"github.com/kelindar/roaring/tinybench"
 )
 
 var (
@@ -18,14 +18,14 @@ func main() {
 	prefix := flag.String("bench", "", "Run only benchmarks with this prefix (e.g. 'set', 'and', 'range')")
 	flag.Parse()
 
-	tinybench.Run(func(runner *tinybench.B) {
+	bench.Run(func(runner *bench.B) {
 		runOps(runner)
 		runMath(runner)
 		runRange(runner)
-	}, tinybench.WithReference(), tinybench.WithFilter(*prefix))
+	}, bench.WithReference(), bench.WithFilter(*prefix))
 }
 
-func runOps(b *tinybench.B) {
+func runOps(b *bench.B) {
 	operations := []struct {
 		name  string
 		ourFn func(*rb.Bitmap, uint32)
@@ -54,14 +54,14 @@ func runOps(b *tinybench.B) {
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
 				b.Run(name,
-					func() { op.ourFn(our, data[rand.IntN(len(data))]) },
-					func() { op.refFn(ref, data[rand.IntN(len(data))]) })
+					func(b *bench.B) { op.ourFn(our, data[rand.IntN(len(data))]) },
+					func(b *bench.B) { op.refFn(ref, data[rand.IntN(len(data))]) })
 			}
 		}
 	}
 }
 
-func runMath(b *tinybench.B) {
+func runMath(b *bench.B) {
 	operations := []struct {
 		name  string
 		ourFn func(*rb.Bitmap, *rb.Bitmap)
@@ -96,11 +96,11 @@ func runMath(b *tinybench.B) {
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
 				b.Run(name,
-					func() {
+					func(b *bench.B) {
 						dst := our.Clone(nil)
 						op.ourFn(dst, ourSrc)
 					},
-					func() {
+					func(b *bench.B) {
 						dst := ref.Clone()
 						op.refFn(dst, refSrc)
 					})
@@ -109,7 +109,7 @@ func runMath(b *tinybench.B) {
 	}
 }
 
-func runRange(b *tinybench.B) {
+func runRange(b *bench.B) {
 	shapes := []struct {
 		name string
 		gen  func(size int) []uint32
@@ -128,8 +128,8 @@ func runRange(b *tinybench.B) {
 			name := fmt.Sprintf("range %s (%s) ", formatSize(size), shape.name)
 
 			b.Run(name,
-				func() { our.Range(func(uint32) {}) },
-				func() { ref.Iterate(func(uint32) bool { return true }) })
+				func(b *bench.B) { our.Range(func(uint32) {}) },
+				func(b *bench.B) { ref.Iterate(func(uint32) bool { return true }) })
 		}
 	}
 }
