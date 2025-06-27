@@ -110,28 +110,3 @@ func (c *container) tryOptimize() {
 		c.optimize()
 	}
 }
-
-// and performs efficient AND between two containers
-func (c1 *container) and(c2 *container) bool {
-	c1.fork()
-	switch {
-	case c1.Type == typeArray && c2.Type == typeArray:
-		return arrAndArr(c1, c2)
-	case c1.Type == typeArray && c2.Type == typeBitmap:
-		return arrAndBmp(c1, c2)
-	case c1.Type == typeArray && c2.Type == typeRun:
-		return arrAndRun(c1, c2)
-
-	case c1.Type == typeBitmap && c2.Type == typeArray:
-		return bmpAndArr(c1, c2)
-	case c1.Type == typeBitmap && c2.Type == typeBitmap:
-		return bmpAndBmp(c1, c2)
-	case c1.Type == typeBitmap && c2.Type == typeRun:
-		return bmpAndRun(c1, c2)
-
-	case c1.Type == typeRun:
-		return runAndCtr(c1, c2)
-	default:
-		return false
-	}
-}

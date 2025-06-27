@@ -4,7 +4,7 @@ package roaring
 type Bitmap struct {
 	containers []container // Containers in sorted order by key
 	index      []uint16    // Container keys for cache-efficient searching
-	scratch    []uint32
+	scratch    []uint16
 }
 
 // New creates a new empty roaring bitmap

@@ -17,9 +17,9 @@ func (rb *Bitmap) and(other *Bitmap) {
 		idx, exists := find16(other.index, rb.index[i])
 		switch {
 		case !exists:
-			rb.scratch = append(rb.scratch, uint32(i))
-		case !c1.and(&other.containers[idx]):
-			rb.scratch = append(rb.scratch, uint32(i))
+			rb.scratch = append(rb.scratch, uint16(i))
+		case !rb.ctrAnd(c1, &other.containers[idx]):
+			rb.scratch = append(rb.scratch, uint16(i))
 		}
 	}
 
@@ -29,8 +29,33 @@ func (rb *Bitmap) and(other *Bitmap) {
 	}
 }
 
+// and performs efficient AND between two containers
+func (rb *Bitmap) ctrAnd(c1, c2 *container) bool {
+	c1.fork()
+	switch {
+	case c1.Type == typeArray && c2.Type == typeArray:
+		return rb.arrAndArr(c1, c2)
+	case c1.Type == typeArray && c2.Type == typeBitmap:
+		return rb.arrAndBmp(c1, c2)
+	case c1.Type == typeArray && c2.Type == typeRun:
+		return rb.arrAndRun(c1, c2)
+
+	case c1.Type == typeBitmap && c2.Type == typeArray:
+		return rb.bmpAndArr(c1, c2)
+	case c1.Type == typeBitmap && c2.Type == typeBitmap:
+		return rb.bmpAndBmp(c1, c2)
+	case c1.Type == typeBitmap && c2.Type == typeRun:
+		return rb.bmpAndRun(c1, c2)
+
+	case c1.Type == typeRun:
+		return rb.runAndCtr(c1, c2)
+	default:
+		return false
+	}
+}
+
 // arrAndArr performs AND between two array containers
-func arrAndArr(c1, c2 *container) bool {
+func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	i, j, k := 0, 0, 0
 	for i < len(a) && j < len(b) {
@@ -54,7 +79,7 @@ func arrAndArr(c1, c2 *container) bool {
 }
 
 // arrAndBmp performs AND between array and bitmap containers
-func arrAndBmp(c1, c2 *container) bool {
+func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
 	a, b := c1.Data, c2.bmp()
 	out := a[:0]
 
@@ -70,7 +95,7 @@ func arrAndBmp(c1, c2 *container) bool {
 }
 
 // arrAndRun performs AND between array and run containers
-func arrAndRun(c1, c2 *container) bool {
+func (rb *Bitmap) arrAndRun(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	out := a[:0]
 
@@ -89,9 +114,9 @@ func arrAndRun(c1, c2 *container) bool {
 }
 
 // bmpAndArr performs AND between bitmap and array containers
-func bmpAndArr(c1, c2 *container) bool {
+func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
 	a, b := c1.bmp(), c2.Data
-	out := make([]uint16, 0, len(b))
+	out := rb.scratch[:0]
 
 	for _, val := range b {
 		if a.Contains(uint32(val)) {
@@ -99,13 +124,13 @@ func bmpAndArr(c1, c2 *container) bool {
 		}
 	}
 
-	c1.Data = out
-	c1.Size = uint32(len(out))
+	copy(c1.Data, out)
+	c1.Size = uint32(len(c1.Data))
 	return c1.Size > 0
 }
 
 // bmpAndBmp performs AND between two bitmap containers
-func bmpAndBmp(c1, c2 *container) bool {
+func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
 	a, b := c1.bmp(), c2.bmp()
 	if a == nil || b == nil {
 		return false
@@ -118,7 +143,7 @@ func bmpAndBmp(c1, c2 *container) bool {
 }
 
 // bmpAndRun performs AND between bitmap and run containers
-func bmpAndRun(c1, c2 *container) bool {
+func (rb *Bitmap) bmpAndRun(c1, c2 *container) bool {
 	a, b := c1.bmp(), c2.Data
 	i, count := 0, 0
 	a.Filter(func(x uint32) bool {
@@ -139,7 +164,7 @@ func bmpAndRun(c1, c2 *container) bool {
 }
 
 // runAndCtr performs AND between run container and other container
-func runAndCtr(c1, c2 *container) bool {
+func (rb *Bitmap) runAndCtr(c1, c2 *container) bool {
 	numRuns := len(c1.Data) / 2
 	newData := make([]uint16, 0, len(c1.Data))
 	var newSize uint32
