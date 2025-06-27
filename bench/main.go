@@ -18,7 +18,7 @@ const (
 	headerSep   = "------------"
 
 	// Sampling constants
-	numSamples     = 10
+	numSamples     = 100
 	sampleDuration = 10 * time.Millisecond
 )
 
@@ -219,7 +219,7 @@ func (br *BenchRunner) formatResult(ourSamples, refSamples []float64) string {
 	}
 
 	speedup := our.Mean / ref.Mean
-	diff := tinystat.Compare(our, ref, 95)
+	diff := tinystat.Compare(our, ref, 99)
 	if !diff.Significant() {
 		return fmt.Sprintf("~ %.2fx (p=%.3f)", speedup, diff.PValue)
 	}
