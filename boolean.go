@@ -82,21 +82,23 @@ func (rb *Bitmap) andSingle(other *Bitmap) {
 // andContainers performs efficient AND between two containers
 func (rb *Bitmap) andContainers(c1, c2 *container) bool {
 	c1.cowEnsureOwned()
-
-	// Use most efficient algorithm based on container types
 	switch {
 	case c1.Type == typeArray && c2.Type == typeArray:
 		return rb.arrAndArr(c1, c2)
 	case c1.Type == typeArray && c2.Type == typeBitmap:
 		return rb.arrAndBmp(c1, c2)
+	case c1.Type == typeArray && c2.Type == typeRun:
+		return rb.arrAndRun(c1, c2)
+
 	case c1.Type == typeBitmap && c2.Type == typeArray:
 		return rb.bmpAndArr(c1, c2)
 	case c1.Type == typeBitmap && c2.Type == typeBitmap:
 		return rb.bmpAndBmp(c1, c2)
+	case c1.Type == typeBitmap && c2.Type == typeRun:
+		return rb.bmpAndRun(c1, c2)
+
 	case c1.Type == typeRun:
-		return rb.andRunContainer(c1, c2)
-	case c2.Type == typeRun:
-		return rb.andContainerRun(c1, c2)
+		return rb.runAndCtr(c1, c2)
 	default:
 		return false
 	}
@@ -142,6 +144,31 @@ func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
 	return true
 }
 
+// andContainerRun performs AND between container and run container
+func (rb *Bitmap) arrAndRun(c1, c2 *container) bool {
+	numRuns := len(c2.Data) / 2
+	arr := c1.Data
+	result := arr[:0]
+
+	for _, val := range arr {
+		// Check if value is in any run
+		for i := 0; i < numRuns; i++ {
+			start, end := c2.Data[i*2], c2.Data[i*2+1]
+			if val >= start && val <= end {
+				result = append(result, val)
+				break
+			}
+		}
+	}
+
+	c1.Data = result
+	c1.Size = uint32(len(result))
+	if c1.Size == 0 {
+		return false
+	}
+	return true
+}
+
 // bmpAndArr performs AND between bitmap and array containers
 func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
 	a, b := c1.bmp(), c2.Data
@@ -172,13 +199,44 @@ func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
 
 	// Convert to array if small enough
 	if c1.Size <= arrMinSize {
-		rb.bitmapToArray(c1)
+		c1.bmpToArr()
 	}
 	return true
 }
 
-// andRunContainer performs AND between run container and other container
-func (rb *Bitmap) andRunContainer(c1, c2 *container) bool {
+// andContainerRun performs AND between container and run container
+func (rb *Bitmap) bmpAndRun(c1, c2 *container) bool {
+	numRuns := len(c2.Data) / 2
+	bmp := c1.bmp()
+	newData := make([]uint16, 0, c1.Size)
+
+	for i := 0; i < numRuns; i++ {
+		start, end := c2.Data[i*2], c2.Data[i*2+1]
+		for v := start; v <= end; v++ {
+			if bmp.Contains(uint32(v)) {
+				newData = append(newData, v)
+			}
+			if v == end {
+				break
+			}
+		}
+	}
+
+	if len(newData) == 0 {
+		c1.Data = c1.Data[:0]
+		c1.Size = 0
+		return false
+	}
+
+	c1.Data = newData
+	c1.Size = uint32(len(newData))
+	c1.Type = typeArray
+	c1.optimize()
+	return c1.Size > 0
+}
+
+// runAndCtr performs AND between run container and other container
+func (rb *Bitmap) runAndCtr(c1, c2 *container) bool {
 	numRuns := len(c1.Data) / 2
 	newData := make([]uint16, 0, len(c1.Data))
 	var newSize uint32
@@ -224,91 +282,6 @@ func (rb *Bitmap) andRunContainer(c1, c2 *container) bool {
 	c1.Data = newData
 	c1.Size = newSize
 	return true
-}
-
-// andContainerRun performs AND between container and run container
-func (rb *Bitmap) andContainerRun(c1, c2 *container) bool {
-	numRuns := len(c2.Data) / 2
-
-	switch c1.Type {
-	case typeArray:
-		arr := c1.Data
-		result := arr[:0]
-
-		for _, val := range arr {
-			// Check if value is in any run
-			for i := 0; i < numRuns; i++ {
-				start, end := c2.Data[i*2], c2.Data[i*2+1]
-				if val >= start && val <= end {
-					result = append(result, val)
-					break
-				}
-			}
-		}
-
-		c1.Data = result
-		c1.Size = uint32(len(result))
-		if c1.Size == 0 {
-			return false
-		}
-		return true
-
-	case typeBitmap:
-		bmp := c1.bmp()
-		newData := make([]uint16, 0, c1.Size)
-
-		for i := 0; i < numRuns; i++ {
-			start, end := c2.Data[i*2], c2.Data[i*2+1]
-			for v := start; v <= end; v++ {
-				if bmp.Contains(uint32(v)) {
-					newData = append(newData, v)
-				}
-				if v == end {
-					break
-				}
-			}
-		}
-
-		if len(newData) == 0 {
-			c1.Data = c1.Data[:0]
-			c1.Size = 0
-			return false
-		}
-
-		c1.Data = newData
-		c1.Size = uint32(len(newData))
-		c1.Type = typeArray
-		c1.optimize()
-		return c1.Size > 0
-	}
-	return false
-}
-
-// bitmapToArray converts bitmap container to array if efficient
-func (rb *Bitmap) bitmapToArray(c *container) {
-	if c.Type != typeBitmap || c.Size > arrMinSize {
-		return
-	}
-
-	// Ensure we own the data before modifying (COW protection)
-	c.cowEnsureOwned()
-
-	bmp := c.bmp()
-	arr := make([]uint16, 0, c.Size)
-
-	for i, word := range bmp {
-		if word != 0 {
-			base := uint16(i * 64)
-			for j := 0; j < 64; j++ {
-				if word&(1<<j) != 0 {
-					arr = append(arr, base+uint16(j))
-				}
-			}
-		}
-	}
-
-	c.Data = arr
-	c.Type = typeArray
 }
 
 // AndNot performs bitwise AND NOT operation with other bitmap(s)

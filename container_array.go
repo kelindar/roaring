@@ -7,17 +7,14 @@ func (c *container) arrSet(value uint16) bool {
 		return false // Already exists
 	}
 
-	// Insert at position idx more efficiently
-	oldLen := len(c.Data)
-	c.Data = append(c.Data, 0) // Add space for new uint16
-	newArray := c.Data
-
 	// Move elements to the right using bulk copy
+	oldLen := len(c.Data)
+	c.Data = append(c.Data, 0)
 	if idx < oldLen {
-		copy(newArray[idx+1:], c.Data[idx:])
+		copy(c.Data[idx+1:], c.Data[idx:])
 	}
 
-	newArray[idx] = value
+	c.Data[idx] = value
 	c.Size++
 	return true
 }
@@ -31,7 +28,7 @@ func (c *container) arrDel(value uint16) bool {
 
 	// Remove element at index idx
 	copy(c.Data[idx:], c.Data[idx+1:])
-	c.Data = c.Data[:len(c.Data)-1] // Shrink by one uint16
+	c.Data = c.Data[:len(c.Data)-1]
 	c.Size--
 	return true
 }
@@ -88,9 +85,9 @@ func (c *container) arrToRun() bool {
 	if len(c.Data) == 0 {
 		return false
 	}
-	runsData := make([]uint16, 0, len(c.Data)/2) // estimate runs needed
 
-	// Single iteration: build runs AND count them
+	// Build runs and count them
+	runsData := make([]uint16, 0, len(c.Data)/2)
 	i0 := c.Data[0]
 	i1 := c.Data[0]
 

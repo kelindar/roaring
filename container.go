@@ -33,20 +33,6 @@ func (c *container) cowEnsureOwned() {
 	}
 }
 
-// cowClone creates a copy-on-write clone of the container
-func (c *container) cowClone() *container {
-	clone := &container{
-		Type:   c.Type,
-		Call:   c.Call,
-		Size:   c.Size,
-		Data:   c.Data,
-		Shared: true,
-	}
-
-	c.Shared = true
-	return clone
-}
-
 // set sets a value in the container and returns true if the value was added (didn't exist before)
 func (c *container) set(value uint16) (ok bool) {
 	c.cowEnsureOwned()
