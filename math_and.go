@@ -155,24 +155,29 @@ func (rb *Bitmap) bmpAndBmp(c1, c2 *container) bool {
 
 	a.And(b)
 	c1.Size = uint32(a.Count())
-	return true
+	return c1.Size > 0
 }
 
 // bmpAndRun performs AND between bitmap and run containers
 func (rb *Bitmap) bmpAndRun(c1, c2 *container) bool {
 	a, b := c1.bmp(), c2.Data
-	i, count := 0, 0
+	n := len(b) / 2
+	if n == 0 {
+		c1.Size = 0
+		return false
+	}
+
+	count, run := 0, 0
 	a.Filter(func(x uint32) bool {
-		switch {
-		case x < uint32(b[i*2]):
-			return false
-		case x > uint32(b[i*2+1]):
-			i++
-			return false
-		default:
+		for run < n && x > uint32(b[run*2+1]) {
+			run++
+		}
+
+		if run < n && x >= uint32(b[run*2]) && x <= uint32(b[run*2+1]) {
 			count++
 			return true
 		}
+		return false
 	})
 
 	c1.Size = uint32(count)
