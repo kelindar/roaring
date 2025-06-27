@@ -5,15 +5,9 @@ func (c *container) arr() []uint16 {
 	return c.Data
 }
 
-// arrFind performs optimized binary search in array container
-// Returns (index, found) where index is the insertion point if not found
-func (c *container) arrFind(value uint16) (int, bool) {
-	return find16(c.arr(), value)
-}
-
 // arrSet sets a value in an array container
 func (c *container) arrSet(value uint16) bool {
-	idx, exists := c.arrFind(value)
+	idx, exists := find16(c.arr(), value)
 	if exists {
 		return false // Already exists
 	}
@@ -36,7 +30,7 @@ func (c *container) arrSet(value uint16) bool {
 
 // arrDel removes a value from an array container
 func (c *container) arrDel(value uint16) bool {
-	idx, exists := c.arrFind(value)
+	idx, exists := find16(c.arr(), value)
 	if !exists {
 		return false
 	}
@@ -51,7 +45,7 @@ func (c *container) arrDel(value uint16) bool {
 
 // arrHas checks if a value exists in an array container
 func (c *container) arrHas(value uint16) bool {
-	_, exists := c.arrFind(value)
+	_, exists := find16(c.arr(), value)
 	return exists
 }
 
