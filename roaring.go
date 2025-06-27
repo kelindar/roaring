@@ -75,28 +75,26 @@ func (rb *Bitmap) Optimize() {
 // Clone clones the bitmap
 func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	if into == nil {
-		into = &Bitmap{}
+		into = New()
 	}
 
 	// Clone containers
-	into.containers = make([]container, len(rb.containers))
-
-	for i := range rb.containers {
-		// Mark original as shared and copy with shared data
-		rb.containers[i].Shared = true
-		into.containers[i] = container{
-			Type:   rb.containers[i].Type,
-			Call:   rb.containers[i].Call,
-			Size:   rb.containers[i].Size,
-			Data:   rb.containers[i].Data, // Share the same underlying slice
-			Shared: true,
-		}
+	if cap(into.containers) < len(rb.containers) {
+		into.containers = make([]container, len(rb.containers), cap(rb.containers))
 	}
+	into.containers = into.containers[:len(rb.containers)]
+	for i := range rb.containers {
+		rb.containers[i].Shared = true
+	}
+	copy(into.containers, rb.containers)
 
 	// Clone index
-	into.index = make([]uint16, len(rb.index))
-	copy(into.index, rb.index)
+	if cap(into.index) < len(rb.index) {
+		into.index = make([]uint16, len(rb.index), cap(rb.index))
+	}
 
+	into.index = into.index[:len(rb.index)]
+	copy(into.index, rb.index)
 	return into
 }
 

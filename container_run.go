@@ -29,12 +29,10 @@ func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
 
 	// linear phase inside one cache line
 	for i := lo; i < hi; i++ {
-		start := c.Data[i*2]
-		if value < start { // falls between previous end and this start
+		switch {
+		case value < c.Data[i*2]:
 			return [2]int{i, i}, false
-		}
-		end := c.Data[i*2+1]
-		if value <= end { // inside run
+		case value <= c.Data[i*2+1]:
 			return [2]int{i, i}, true
 		}
 	}
