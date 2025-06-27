@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ const (
 	// Default sampling configuration
 	DefaultSamples  = 100
 	DefaultDuration = 10 * time.Millisecond
-	DefaultTableFmt = "%-20s %-12s %-12s %-18s %-18s\n"
+	DefaultTableFmt = "%-20s %-12s %-12s %-12s %-18s %-18s\n"
 	DefaultFilename = "bench.json"
 )
 
@@ -22,6 +23,7 @@ const (
 type Result struct {
 	Name      string    `json:"name"`
 	Samples   []float64 `json:"samples"`
+	Allocs    []float64 `json:"-"`
 	Timestamp int64     `json:"timestamp"`
 }
 
@@ -98,11 +100,11 @@ func Run(fn func(*B), opts ...Option) {
 // printHeader prints the table header
 func (r *B) printHeader() {
 	if r.showRef {
-		fmt.Printf(r.tableFmt, "name", "time/op", "ops/s", "vs prev", "vs ref")
-		fmt.Printf(r.tableFmt, "--------------------", "------------", "------------", "------------------", "------------------")
+		fmt.Printf(r.tableFmt, "name", "time/op", "ops/s", "allocs/op", "vs prev", "vs ref")
+		fmt.Printf(r.tableFmt, "--------------------", "------------", "------------", "------------", "------------------", "------------------")
 	} else {
-		fmt.Printf("%-20s %-12s %-12s %-18s\n", "name", "time/op", "ops/s", "vs prev")
-		fmt.Printf("%-20s %-12s %-12s %-18s\n", "--------------------", "------------", "------------", "------------------")
+		fmt.Printf("%-20s %-12s %-12s %-12s %-18s\n", "name", "time/op", "ops/s", "allocs/op", "vs prev")
+		fmt.Printf("%-20s %-12s %-12s %-12s %-18s\n", "--------------------", "------------", "------------", "------------", "------------------")
 	}
 }
 
@@ -115,18 +117,44 @@ func (r *B) shouldRun(name string) bool {
 }
 
 // benchmark runs a function repeatedly and returns performance samples
-func (r *B) benchmark(fn func()) []float64 {
-	samples := make([]float64, r.samples)
-	for i := range samples {
+func (r *B) benchmark(fn func()) (samples []float64, allocs []float64) {
+	samples = make([]float64, 0, r.samples)
+	allocs = make([]float64, 0, r.samples)
+	for i := 0; i < r.samples; i++ {
+		// Force GC to get clean allocation measurements
+		runtime.GC()
+		runtime.GC()
+
+		var m1, m2 runtime.MemStats
+		runtime.ReadMemStats(&m1)
+
 		start := time.Now()
 		ops := 0
 		for time.Since(start) < r.duration {
 			fn()
 			ops++
 		}
-		samples[i] = float64(ops) / time.Since(start).Seconds()
+		elapsed := time.Since(start)
+
+		runtime.ReadMemStats(&m2)
+
+		opsPerSec := float64(ops) / elapsed.Seconds()
+		allocsPerOp := float64(m2.HeapAlloc-m1.HeapAlloc) / float64(ops)
+
+		samples = append(samples, opsPerSec)
+		allocs = append(allocs, allocsPerOp)
 	}
-	return samples
+	return samples, allocs
+}
+
+// formatAllocs formats heap allocations per operation
+func (r *B) formatAllocs(allocsPerOp float64) string {
+	switch {
+	case allocsPerOp >= 1000:
+		return fmt.Sprintf("%.1fK", allocsPerOp/1000)
+	default:
+		return fmt.Sprintf("%.0f", allocsPerOp)
+	}
 }
 
 // loadResults loads previous results from JSON file
@@ -243,9 +271,16 @@ func (r *B) Run(name string, ourFn func(), refFn ...func()) {
 	prevResults := r.loadResults()
 
 	// Benchmark our implementation
-	ourSamples := r.benchmark(ourFn)
+	ourSamples, ourAllocs := r.benchmark(ourFn)
 	ourMean := tinystat.Summarize(ourSamples).Mean
 	nsPerOp := 1e9 / ourMean
+
+	// Calculate average allocations per operation
+	var totalAllocs float64
+	for _, v := range ourAllocs {
+		totalAllocs += v
+	}
+	avgAllocsPerOp := totalAllocs / float64(len(ourSamples))
 
 	// Create result
 	result := Result{
@@ -264,7 +299,7 @@ func (r *B) Run(name string, ourFn func(), refFn ...func()) {
 	// Calculate vs reference if provided
 	vsRef := ""
 	if len(refFn) > 0 && refFn[0] != nil {
-		refSamples := r.benchmark(refFn[0])
+		refSamples, _ := r.benchmark(refFn[0])
 		vsRef = r.formatResult(ourSamples, refSamples)
 	}
 
@@ -274,13 +309,15 @@ func (r *B) Run(name string, ourFn func(), refFn ...func()) {
 			name,
 			r.formatTime(nsPerOp),
 			r.formatOps(ourMean),
+			r.formatAllocs(avgAllocsPerOp),
 			delta,
 			vsRef)
 	} else {
-		fmt.Printf("%-20s %-12s %-12s %-18s\n",
+		fmt.Printf("%-20s %-12s %-12s %-12s %-18s\n",
 			name,
 			r.formatTime(nsPerOp),
 			r.formatOps(ourMean),
+			r.formatAllocs(avgAllocsPerOp),
 			delta)
 	}
 
