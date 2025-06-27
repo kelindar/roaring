@@ -2,10 +2,8 @@ package roaring
 
 import (
 	"math/rand/v2"
-	"testing"
 
 	"github.com/kelindar/bitmap"
-	"github.com/stretchr/testify/assert"
 )
 
 func bitmapWith(c *container) (*Bitmap, []uint16) {
@@ -76,35 +74,6 @@ func testPair(data []uint32) (*Bitmap, *bitmap.Bitmap) {
 		ref.Set(v)
 	}
 	return our, &ref
-}
-
-// testPairRandom creates bitmaps with 50% of values set randomly
-func testPairRandom(data []uint32) (*Bitmap, *bitmap.Bitmap) {
-	our := New()
-	var ref bitmap.Bitmap
-	for _, v := range data {
-		if rand.IntN(2) == 0 {
-			our.Set(v)
-			ref.Set(v)
-		}
-	}
-	return our, &ref
-}
-
-// assertEqualBitmaps compares our bitmap with reference bitmap
-func assertEqualBitmaps(t *testing.T, our *Bitmap, ref *bitmap.Bitmap) {
-	assert.Equal(t, ref.Count(), our.Count(), "Count mismatch")
-
-	// Compare all values
-	var ourValues, refValues []uint32
-	our.Range(func(x uint32) { ourValues = append(ourValues, x) })
-	ref.Range(func(x uint32) { refValues = append(refValues, x) })
-	assert.Equal(t, refValues, ourValues, "Range mismatch")
-
-	// Check individual contains calls
-	ref.Range(func(x uint32) {
-		assert.True(t, our.Contains(x), "Contains mismatch for %d", x)
-	})
 }
 
 // changeType creates bitmap that forces specific container types
