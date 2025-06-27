@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand/v2"
+	"time"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/kelindar/bench"
@@ -11,7 +12,7 @@ import (
 )
 
 var (
-	sizes = []int{1e3, 1e7}
+	sizes = []int{1e3, 1e6}
 )
 
 func main() {
@@ -22,7 +23,11 @@ func main() {
 		runOps(runner)
 		runMath(runner)
 		runRange(runner)
-	}, bench.WithReference(), bench.WithFilter(*prefix))
+	}, bench.WithReference(),
+		bench.WithFilter(*prefix),
+		bench.WithDuration(10*time.Millisecond),
+		bench.WithSamples(100),
+	)
 }
 
 func runOps(b *bench.B) {
@@ -136,9 +141,9 @@ func runRange(b *bench.B) {
 
 func formatSize(size int) string {
 	if size >= 1e6 {
-		return fmt.Sprintf("%.1fM", float64(size)/1e6)
+		return fmt.Sprintf("%.0fM", float64(size)/1e6)
 	}
-	return fmt.Sprintf("%.1fK", float64(size)/1e3)
+	return fmt.Sprintf("%.0fK", float64(size)/1e3)
 }
 
 func dataSeq(size int) []uint32 {
