@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"strings"
 	"time"
 
@@ -14,12 +16,15 @@ import (
 
 const (
 	// Table formatting constants
-	tableFormat = "%-16s %-6s %-12s %-12s %-18s\n"
+	tableFormat = "%-16s %-6s %-12s %-12s %-18s %-12s\n"
 	headerSep   = "------------"
 
 	// Sampling constants
 	numSamples     = 100
 	sampleDuration = 10 * time.Millisecond
+
+	// Results file
+	resultsFile = "bench.json"
 )
 
 var (
@@ -34,19 +39,94 @@ func main() {
 		prefix: *prefix,
 	}
 
+	runner.loadPreviousResults()
 	runner.printHeader()
 	runner.runOps()
 	runner.runMath()
 	runner.runRange()
 }
 
+// BenchResult represents a single benchmark result
+type BenchResult struct {
+	Name string    `json:"name"`
+	Data []float64 `json:"data"`
+	Time int64     `json:"time"`
+}
+
 type BenchRunner struct {
 	prefix string
+	result map[string]BenchResult
+}
+
+func (br *BenchRunner) loadPreviousResults() {
+	data, err := os.ReadFile(resultsFile)
+	if err != nil {
+		br.result = make(map[string]BenchResult)
+		return
+	}
+
+	var results map[string]BenchResult
+	if err := json.Unmarshal(data, &results); err != nil {
+		br.result = make(map[string]BenchResult)
+		return
+	}
+
+	br.result = results
+}
+
+func (br *BenchRunner) saveResults(currentResults map[string]BenchResult) {
+	data, err := json.MarshalIndent(currentResults, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling results: %v\n", err)
+		return
+	}
+
+	if err := os.WriteFile(resultsFile, data, 0644); err != nil {
+		fmt.Printf("Error writing results file: %v\n", err)
+	}
+}
+
+func (br *BenchRunner) saveResult(result BenchResult) {
+	// Load current file
+	br.loadPreviousResults()
+
+	// Update with new result
+	br.result[result.Name] = result
+
+	// Save back to file
+	br.saveResults(br.result)
+}
+
+func (br *BenchRunner) formatDelta(current, previous BenchResult) string {
+	if len(previous.Data) == 0 {
+		return "new"
+	}
+
+	curr := tinystat.Summarize(current.Data)
+	prev := tinystat.Summarize(previous.Data)
+	if prev.Mean == 0 {
+		if curr.Mean > 0 {
+			return "✅ inf"
+		}
+		return "~ 1.00x"
+	}
+
+	speedup := curr.Mean / prev.Mean
+	diff := tinystat.Compare(curr, prev, 99)
+	if !diff.Significant() {
+		return fmt.Sprintf("~ %.2fx (p=%.3f)", speedup, diff.PValue)
+	}
+
+	if speedup > 1 {
+		return fmt.Sprintf("✅ %.2fx (p=%.3f)", speedup, diff.PValue)
+	}
+
+	return fmt.Sprintf("❌ %.2fx (p=%.3f)", speedup, diff.PValue)
 }
 
 func (br *BenchRunner) printHeader() {
-	fmt.Printf(tableFormat, "name", "size", "time/op", "ops/s", "result")
-	fmt.Printf(tableFormat, "----------------", "------", headerSep, headerSep, "------------------")
+	fmt.Printf(tableFormat, "name", "size", "time/op", "ops/s", "result", "delta")
+	fmt.Printf(tableFormat, "----------------", "------", headerSep, headerSep, "------------------", headerSep)
 }
 
 func (br *BenchRunner) shouldRun(name string) bool {
@@ -105,10 +185,28 @@ func (br *BenchRunner) runOps() {
 			nsPerOp := 1e9 / ourMeanOps
 			result := br.formatResult(ourSamples, refSamples)
 
-			fmt.Printf(tableFormat,
-				fmt.Sprintf("%s (%s)", op.name, typ.Shape), br.formatSize(typ.Size),
-				br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps/1e6), result)
+			name := fmt.Sprintf("%s (%s)", op.name, typ.Shape)
 
+			currentResult := BenchResult{
+				Name: name,
+				Data: ourSamples,
+				Time: time.Now().Unix(),
+			}
+
+			previousResult, exists := br.result[currentResult.Name]
+			delta := "new"
+			if exists {
+				delta = br.formatDelta(currentResult, previousResult)
+			}
+
+			fmt.Printf(tableFormat, name,
+				br.formatSize(typ.Size),
+				br.formatTime(nsPerOp),
+				fmt.Sprintf("%.1fM", ourMeanOps/1e6),
+				result,
+				delta)
+
+			br.saveResult(currentResult)
 		}
 	}
 }
@@ -158,9 +256,27 @@ func (br *BenchRunner) runMath() {
 				nsPerOp := 1e9 / ourMeanOps
 				result := br.formatResult(ourSamples, refSamples)
 
+				currentResult := BenchResult{
+					Name: fmt.Sprintf("%s (%s)", op.name, shape.name),
+					Data: ourSamples,
+					Time: time.Now().Unix(),
+				}
+
+				previousResult, exists := br.result[currentResult.Name]
+				delta := "new"
+				if exists {
+					delta = br.formatDelta(currentResult, previousResult)
+				}
+
 				fmt.Printf(tableFormat,
-					fmt.Sprintf("%s (%s)", op.name, shape.name), br.formatSize(size),
-					br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps/1e6), result)
+					currentResult.Name,
+					br.formatSize(size),
+					br.formatTime(nsPerOp),
+					fmt.Sprintf("%.1fM", ourMeanOps/1e6),
+					result,
+					delta)
+
+				br.saveResult(currentResult)
 			}
 		}
 	}
@@ -197,9 +313,27 @@ func (br *BenchRunner) runRange() {
 			nsPerOp := 1e9 / (ourMeanOps * float64(our.Count()))
 			result := br.formatResult(refSamples, ourSamples)
 
+			currentResult := BenchResult{
+				Name: fmt.Sprintf("range (%s)", shape.name),
+				Data: ourSamples,
+				Time: time.Now().Unix(),
+			}
+
+			previousResult, exists := br.result[currentResult.Name]
+			delta := "new"
+			if exists {
+				delta = br.formatDelta(currentResult, previousResult)
+			}
+
 			fmt.Printf(tableFormat,
-				fmt.Sprintf("range (%s)", shape.name), br.formatSize(size),
-				br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps*float64(our.Count())/1e6), result)
+				currentResult.Name,
+				br.formatSize(size),
+				br.formatTime(nsPerOp),
+				fmt.Sprintf("%.1fM", ourMeanOps*float64(our.Count())/1e6),
+				result,
+				delta)
+
+			br.saveResult(currentResult)
 		}
 	}
 }
