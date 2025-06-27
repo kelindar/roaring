@@ -2,7 +2,7 @@ package roaring
 
 const (
 	arrMinSize    = 2048
-	runMinSize    = 100
+	runMinSize    = 128
 	runMaxSize    = 2048
 	optimizeEvery = 2048
 )
@@ -16,17 +16,15 @@ const (
 )
 
 type container struct {
-	Type   ctype    // Type of the container
-	Shared bool     // COW: true if data is shared between containers
-	Call   uint16   // Call count
-	Size   uint32   // Cardinality
-	Data   []uint16 // Data of the container
+	Type   ctype  // Type of the container
+	Shared bool   // COW: true if data is shared between containers
+	Call   uint16 // Call count
+	Size   uint32 // Cardinality
+	Data   []uint16
 }
 
-type run [2]uint16
-
-// cowEnsureOwned ensures the container owns its data before modification
-func (c *container) cowEnsureOwned() {
+// fork ensures the container owns its data before modification
+func (c *container) fork() {
 	if c.Shared {
 		clone := make([]uint16, len(c.Data), cap(c.Data))
 		copy(clone, c.Data)
@@ -35,23 +33,9 @@ func (c *container) cowEnsureOwned() {
 	}
 }
 
-// cowClone creates a copy-on-write clone of the container
-func (c *container) cowClone() *container {
-	clone := &container{
-		Type:   c.Type,
-		Call:   c.Call,
-		Size:   c.Size,
-		Data:   c.Data,
-		Shared: true,
-	}
-
-	c.Shared = true
-	return clone
-}
-
 // set sets a value in the container and returns true if the value was added (didn't exist before)
 func (c *container) set(value uint16) (ok bool) {
-	c.cowEnsureOwned()
+	c.fork()
 	switch c.Type {
 	case typeArray:
 		if ok = c.arrSet(value); ok {
@@ -71,7 +55,7 @@ func (c *container) set(value uint16) (ok bool) {
 
 // remove removes a value from the container and returns true if the value was removed (existed before)
 func (c *container) remove(value uint16) (ok bool) {
-	c.cowEnsureOwned() // Ensure we own the data before modifying
+	c.fork()
 	switch c.Type {
 	case typeArray:
 		if ok = c.arrDel(value); ok {
@@ -109,7 +93,7 @@ func (c *container) isEmpty() bool {
 
 // optimize converts the container to the most efficient representation
 func (c *container) optimize() {
-	c.cowEnsureOwned() // Ensure we own the data before modifying
+	c.fork()
 	switch c.Type {
 	case typeArray:
 		c.arrOptimize()

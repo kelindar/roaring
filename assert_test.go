@@ -8,6 +8,63 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func bitmapWith(c *container) (*Bitmap, []uint16) {
+	v := New()
+	v.ctrAdd(0, 0, c)
+	return v, valuesOf(v)
+}
+
+func valuesOf(v *Bitmap) []uint16 {
+	out := []uint16{}
+	v.Range(func(x uint32) {
+		out = append(out, uint16(x))
+	})
+	return out
+}
+
+func newArr(data ...uint32) *container {
+	return newContainer(typeArray, data...)
+}
+
+func newBmp(data ...uint32) *container {
+	return newContainer(typeBitmap, data...)
+}
+
+func newRun(data ...uint32) *container {
+	return newContainer(typeRun, data...)
+}
+
+func newContainer(typ ctype, data ...uint32) *container {
+	var backing []uint16
+	switch typ {
+	case typeBitmap:
+		backing = make([]uint16, 4096)
+	default:
+		backing = make([]uint16, 0, len(data))
+	}
+
+	c := &container{
+		Type: typ,
+		Data: backing,
+	}
+
+	for _, v := range data {
+		switch c.Type {
+		case typeArray:
+			c.arrSet(uint16(v))
+		case typeBitmap:
+			c.bmpSet(uint16(v))
+		case typeRun:
+			c.runSet(uint16(v))
+		}
+	}
+
+	if c.Type == typeRun {
+		c.runOptimize()
+	}
+	return c
+}
+
 // ---------------------------------------- Test Helpers ----------------------------------------
 
 // testPair creates both our bitmap and reference bitmap with same data

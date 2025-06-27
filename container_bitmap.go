@@ -98,7 +98,7 @@ func (c *container) bmpIsDense() bool {
 // bmpToRun attempts to convert bitmap to run in a single pass
 func (c *container) bmpToRun() bool {
 	bmp := c.bmp()
-	runs := make([]run, 0, 16) // estimate for initial capacity
+	runsData := make([]uint16, 0, 32) // estimate for initial capacity
 	var curr, last uint16
 	var inRun bool
 
@@ -113,7 +113,7 @@ func (c *container) bmpToRun() bool {
 		case v == last+1:
 			last = v
 		default:
-			runs = append(runs, run{curr, last})
+			runsData = append(runsData, curr, last)
 			curr = v
 			last = v
 		}
@@ -121,11 +121,11 @@ func (c *container) bmpToRun() bool {
 
 	// Handle the last run if we were in one
 	if inRun {
-		runs = append(runs, run{curr, last})
+		runsData = append(runsData, curr, last)
 	}
 
 	// Check conversion criteria with the actual run count
-	numRuns := len(runs)
+	numRuns := len(runsData) / 2
 	cardinality := int(c.Size)
 	sizeAsRunContainer := 2 + numRuns*4
 	sizeAsArrayContainer := cardinality * 2
@@ -136,10 +136,8 @@ func (c *container) bmpToRun() bool {
 		sizeAsRunContainer < sizeAsArrayContainer/2
 
 	if shouldConvert {
-		c.Data = make([]uint16, len(runs)*2) // 2 uint16s per run
+		c.Data = runsData
 		c.Type = typeRun
-		newRuns := c.run()
-		copy(newRuns, runs)
 		return true
 	}
 
@@ -155,7 +153,7 @@ func (c *container) bmpToArr() {
 	c.Type = typeArray
 
 	// Copy all values to the array efficiently
-	dst := c.arr()
+	dst := c.Data
 	idx := 0
 	src.Range(func(value uint32) {
 		dst[idx] = uint16(value)
