@@ -110,17 +110,32 @@ func (rb *Bitmap) And(other *Bitmap, extra ...*Bitmap) {
 
 // AndNot performs bitwise AND NOT operation with other bitmap(s)
 func (rb *Bitmap) AndNot(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
+	rb.andNot(other)
+	for _, bm := range extra {
+		if bm != nil {
+			rb.andNot(bm)
+		}
+	}
 }
 
 // Or performs bitwise OR operation with other bitmap(s)
 func (rb *Bitmap) Or(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
+	rb.or(other)
+	for _, bm := range extra {
+		if bm != nil {
+			rb.or(bm)
+		}
+	}
 }
 
 // Xor performs bitwise XOR operation with other bitmap(s)
 func (rb *Bitmap) Xor(other *Bitmap, extra ...*Bitmap) {
-	panic("not implemented")
+	rb.xor(other)
+	for _, bm := range extra {
+		if bm != nil {
+			rb.xor(bm)
+		}
+	}
 }
 
 // ---------------------------------------- Container ----------------------------------------
