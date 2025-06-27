@@ -18,7 +18,7 @@ const (
 	headerSep   = "------------"
 
 	// Sampling constants
-	numSamples     = 100
+	numSamples     = 10
 	sampleDuration = 10 * time.Millisecond
 )
 
@@ -77,31 +77,38 @@ func (br *BenchRunner) runOps() {
 		{"dns", dataDense},
 	}
 
+	// Generate all types
+	types := make([]Type, 0, len(shapes)*len(sizes))
+	for _, size := range sizes {
+		for _, shape := range shapes {
+			data := shape.gen(size)
+			our, ref := br.randomBitmaps(data)
+			types = append(types, Type{shape.name, size, data, our, ref})
+		}
+	}
+
 	for _, op := range operations {
 		if !br.shouldRun(op.name) {
 			continue
 		}
 
-		for _, size := range sizes {
-			for _, shape := range shapes {
-				data := shape.gen(size)
-				our, ref := br.randomBitmaps(data)
+		for _, typ := range types {
 
-				// Measure reference performance
-				refSamples := br.benchOp(data, func(v uint32) { op.refFn(ref, v) })
+			// Measure reference performance
+			refSamples := br.benchOp(typ.Data, func(v uint32) { op.refFn(typ.Ref, v) })
 
-				// Measure our performance
-				ourSamples := br.benchOp(data, func(v uint32) { op.ourFn(our, v) })
+			// Measure our performance
+			ourSamples := br.benchOp(typ.Data, func(v uint32) { op.ourFn(typ.Our, v) })
 
-				// Calculate metrics
-				ourMeanOps := tinystat.Summarize(ourSamples).Mean
-				nsPerOp := 1e9 / ourMeanOps
-				result := br.formatResult(ourSamples, refSamples)
+			// Calculate metrics
+			ourMeanOps := tinystat.Summarize(ourSamples).Mean
+			nsPerOp := 1e9 / ourMeanOps
+			result := br.formatResult(ourSamples, refSamples)
 
-				fmt.Printf(tableFormat,
-					fmt.Sprintf("%s (%s)", op.name, shape.name), br.formatSize(size),
-					br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps/1e6), result)
-			}
+			fmt.Printf(tableFormat,
+				fmt.Sprintf("%s (%s)", op.name, typ.Shape), br.formatSize(typ.Size),
+				br.formatTime(nsPerOp), fmt.Sprintf("%.1fM", ourMeanOps/1e6), result)
+
 		}
 	}
 }
@@ -243,22 +250,23 @@ func (br *BenchRunner) formatTime(nsPerOp float64) string {
 
 func (br *BenchRunner) benchOp(data []uint32, fn func(uint32)) []float64 {
 	samples := make([]float64, numSamples)
-	for i := range samples {
+	for s := range samples {
 		start := time.Now()
 		ops := 0
-		for time.Since(start) < sampleDuration {
-			for _, v := range data {
-				fn(v)
-				ops++
-			}
+
+		for i := 0; time.Since(start) < sampleDuration; i++ {
+			fn(data[i%len(data)])
+			ops++
 		}
-		samples[i] = float64(ops) / time.Since(start).Seconds()
+
+		samples[s] = float64(ops) / time.Since(start).Seconds()
 	}
 	return samples
 }
 
 func (br *BenchRunner) benchMathOpOur(bm *rb.Bitmap, fn func(dst, src *rb.Bitmap)) []float64 {
 	samples := make([]float64, numSamples)
+
 	for i := range samples {
 		start := time.Now()
 		ops := 0
@@ -347,4 +355,12 @@ func (br *BenchRunner) randomBitmaps(data []uint32) (*rb.Bitmap, *roaring.Bitmap
 		}
 	}
 	return our, ref
+}
+
+type Type struct {
+	Shape string
+	Size  int
+	Data  []uint32
+	Our   *rb.Bitmap
+	Ref   *roaring.Bitmap
 }
