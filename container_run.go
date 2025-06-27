@@ -1,44 +1,42 @@
 package roaring
 
-// runFind performs binary search to find a value in the run container
-func (c *container) runFind(value uint16) ([2]int, bool) {
-	numRuns := len(c.Data) / 2
-	if numRuns == 0 {
+func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
+	runs := len(c.Data) >> 1 // number of (start,end) pairs
+	switch {
+	case runs == 0:
 		return [2]int{0, 0}, false
+	case value < c.Data[0]:
+		return [2]int{0, 0}, false
+	case value > c.Data[(runs-1)*2+1]:
+		return [2]int{runs, runs}, false
 	}
 
-	// Fast path for small containers - linear search is faster than binary search
-	if numRuns <= 4 {
-		for i := 0; i < numRuns; i++ {
-			start := c.Data[i*2]
-			end := c.Data[i*2+1]
-			if value >= start && value <= end {
-				return [2]int{i, i}, true
-			}
-			if value < start {
-				return [2]int{i, i}, false
-			}
-		}
-		return [2]int{numRuns, numRuns}, false
-	}
-
-	// Binary search for larger containers
-	left, right := 0, numRuns-1
-	for left <= right {
-		mid := (left + right) / 2
-		start := c.Data[mid*2]
-		end := c.Data[mid*2+1]
+	// binary phase: shrink window to ≤4 runs
+	lo, hi := 0, runs
+	for hi-lo > 4 {
+		mid := (lo + hi) >> 1
 		switch {
-		case value >= start && value <= end:
+		case value < c.Data[mid*2]:
+			hi = mid
+		case value <= c.Data[mid*2+1]:
 			return [2]int{mid, mid}, true
-		case value < start:
-			right = mid - 1
 		default:
-			left = mid + 1
+			lo = mid + 1
 		}
 	}
 
-	return [2]int{left, left}, false
+	// linear phase inside one cache line
+	for i := lo; i < hi; i++ {
+		switch {
+		case value < c.Data[i*2]:
+			return [2]int{i, i}, false
+		case value <= c.Data[i*2+1]:
+			return [2]int{i, i}, true
+		}
+	}
+
+	// value is greater than end of hi-1 but ≤ lastEnd (already checked)
+	return [2]int{hi, hi}, false
 }
 
 // runSet sets a value in a run container

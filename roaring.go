@@ -152,9 +152,10 @@ func find16(a []uint16, target uint16) (index int, found bool) {
 	lo, hi := 0, n // hi is exclusive
 	for hi-lo > 16 {
 		mid := (lo + hi) >> 1
-		if a[mid] < target {
+		switch {
+		case a[mid] < target:
 			lo = mid + 1
-		} else {
+		case a[mid] >= target:
 			hi = mid // keep mid in the candidate range
 		}
 	}
@@ -162,16 +163,14 @@ func find16(a []uint16, target uint16) (index int, found bool) {
 	// linear phase inside one cache line
 	i := lo
 	for ; i+3 < hi; i += 4 { // 4-way unroll
-		if a[i] >= target {
+		switch {
+		case a[i] >= target:
 			return i, a[i] == target
-		}
-		if a[i+1] >= target {
+		case a[i+1] >= target:
 			return i + 1, a[i+1] == target
-		}
-		if a[i+2] >= target {
+		case a[i+2] >= target:
 			return i + 2, a[i+2] == target
-		}
-		if a[i+3] >= target {
+		case a[i+3] >= target:
 			return i + 3, a[i+3] == target
 		}
 	}
