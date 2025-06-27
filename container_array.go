@@ -8,34 +8,7 @@ func (c *container) arr() []uint16 {
 // arrFind performs optimized binary search in array container
 // Returns (index, found) where index is the insertion point if not found
 func (c *container) arrFind(value uint16) (int, bool) {
-	array := c.arr()
-	n := len(array)
-
-	// Quick bounds check for early exit
-	switch {
-	case n == 0:
-		return 0, false
-	case value < array[0]:
-		return 0, false
-	case value > array[n-1]:
-		return n, false
-	}
-
-	// Optimized binary search with fewer comparisons
-	left, right := 0, n
-	for left < right {
-		mid := left + (right-left)/2 // avoid overflow
-		switch {
-		case array[mid] < value:
-			left = mid + 1
-		case array[mid] > value:
-			right = mid
-		default:
-			return mid, true
-		}
-	}
-
-	return left, left < n && array[left] == value
+	return find16(c.arr(), value)
 }
 
 // arrSet sets a value in an array container
