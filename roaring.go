@@ -105,6 +105,8 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 // ctrFind finds the container for the given high bits (read-only, no creation)
 // Returns (index, found) where index is the insertion point if not found
 func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
+	const blockSize = 32
+
 	index, n := rb.index, len(rb.index)
 	switch {
 	case n == 0:
@@ -117,44 +119,40 @@ func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
 		return 0, true
 	case hi == index[n-1]:
 		return n - 1, true
-	case n <= 8:
-		for i, key := range index {
-			switch {
-			case key == hi:
-				return i, true
-			case key > hi:
-				return i, false
-			}
-		}
-		return n, false
-
-	// Galloping search for larger arrays
 	default:
-		pos := 1
-		for pos < n && index[pos] < hi {
-			pos <<= 1 // Double the position
-		}
 
-		// Binary search in the found range
-		left := pos >> 1
-		right := pos
-		if right >= n {
-			right = n - 1
-		}
-
+		// Binary search for the correct block
+		numBlocks := (n + blockSize - 1) / blockSize
+		left, right := 0, numBlocks-1
 		for left <= right {
 			mid := left + (right-left)>>1
+			blockStart := mid * blockSize
+			blockEnd := blockStart + blockSize
+			if blockEnd > n {
+				blockEnd = n
+			}
+
 			switch {
-			case index[mid] == hi:
-				return mid, true
-			case index[mid] < hi:
+			case hi < index[blockStart]:
+				right = mid - 1
+			case hi > index[blockEnd-1]:
 				left = mid + 1
 			default:
-				right = mid - 1
+
+				// Linear search within the block
+				for i := blockStart; i < blockEnd; i++ {
+					switch {
+					case index[i] == hi:
+						return i, true
+					case index[i] > hi:
+						return i, false
+					}
+				}
+				return blockEnd, false
 			}
 		}
 
-		return left, false
+		return left * blockSize, false
 	}
 }
 
