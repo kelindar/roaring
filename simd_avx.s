@@ -11,151 +11,53 @@ TEXT ·_find16(SB), $0-32
 	LONG $0xf8e48348                           // and	rsp, -8
 	LONG $0xff02c748; WORD $0xffff; BYTE $0xff // mov	qword ptr [rdx], -1
 	WORD $0x8548; BYTE $0xc9                   // test	rcx, rcx
-	JE   LBB0_9
+	JE   LBB0_10
 	LONG $0x10f98348                           // cmp	rcx, 16
-	JA   LBB0_10
-	WORD $0xc031                               // xor	eax, eax
+	JB   LBB0_2
+	LONG $0xc66ef9c5                           // vmovd	xmm0, esi
+	LONG $0x797de2c4; BYTE $0xc0               // vpbroadcastw	ymm0, xmm0
+	WORD $0x3145; BYTE $0xc9                   // xor	r9d, r9d
 
-LBB0_3:
-	LONG $0x47343966         // cmp	word ptr [rdi + 2*rax], si
-	JAE  LBB0_14
-	WORD $0xff48; BYTE $0xc0 // inc	rax
-	WORD $0x3948; BYTE $0xc1 // cmp	rcx, rax
-	JNE  LBB0_3
+LBB0_7:
+	LONG $0x657da1c4; WORD $0x4f0c // vpcmpgtw	ymm1, ymm0, ymmword ptr [rdi + 2*r9]
+	LONG $0xc1d7fdc5               // vpmovmskb	eax, ymm1
+	WORD $0xf083; BYTE $0xff       // xor	eax, -1
+	JNE  LBB0_8
+	LONG $0x10418d4d               // lea	r8, [r9 + 16]
+	LONG $0x1fc18349               // add	r9, 31
+	WORD $0x3949; BYTE $0xc9       // cmp	r9, rcx
+	WORD $0x894d; BYTE $0xc1       // mov	r9, r8
+	JB   LBB0_7
+	WORD $0x3949; BYTE $0xc8       // cmp	r8, rcx
+	JB   LBB0_4
 
-LBB0_9:
+LBB0_10:
 	WORD $0x8948; BYTE $0xec // mov	rsp, rbp
 	BYTE $0x5d               // pop	rbp
 	WORD $0xf8c5; BYTE $0x77 // vzeroupper
 	BYTE $0xc3               // ret
 
-LBB0_10:
-	LONG $0xc66ef9c5             // vmovd	xmm0, esi
-	LONG $0x797de2c4; BYTE $0xc0 // vpbroadcastw	ymm0, xmm0
-	WORD $0x3145; BYTE $0xc0     // xor	r8d, r8d
-	WORD $0x3145; BYTE $0xc9     // xor	r9d, r9d
-	JMP  LBB0_11
+LBB0_2:
+	WORD $0x3145; BYTE $0xc0 // xor	r8d, r8d
+	WORD $0x3949; BYTE $0xc8 // cmp	r8, rcx
+	JAE  LBB0_10
 
-LBB0_5:
-	LONG $0x10418d49         // lea	rax, [r9 + 16]
-	LONG $0x1fc18349         // add	r9, 31
-	WORD $0x3949; BYTE $0xc9 // cmp	r9, rcx
-	WORD $0x8949; BYTE $0xc1 // mov	r9, rax
-	JAE  LBB0_6
-
-LBB0_11:
-	LONG $0x657da1c4; WORD $0x4f0c // vpcmpgtw	ymm1, ymm0, ymmword ptr [rdi + 2*r9]
-	LONG $0xc1d7fdc5               // vpmovmskb	eax, ymm1
-	WORD $0xf083; BYTE $0xff       // xor	eax, -1
-	JE   LBB0_5
-	WORD $0x03a8                   // test	al, 3
-	JNE  LBB0_13
-	WORD $0x0ca8                   // test	al, 12
-	JNE  LBB0_16
-	WORD $0x30a8                   // test	al, 48
-	JNE  LBB0_18
-	WORD $0xc0a8                   // test	al, -64
-	JNE  LBB0_20
-	LONG $0x000300a9; BYTE $0x00   // test	eax, 768
-	JNE  LBB0_22
-	LONG $0x000c00a9; BYTE $0x00   // test	eax, 3072
-	JNE  LBB0_24
-	LONG $0x003000a9; BYTE $0x00   // test	eax, 12288
-	JNE  LBB0_26
-	LONG $0x00c000a9; BYTE $0x00   // test	eax, 49152
-	JNE  LBB0_28
-	LONG $0x030000a9; BYTE $0x00   // test	eax, 196608
-	JNE  LBB0_30
-	LONG $0x0c0000a9; BYTE $0x00   // test	eax, 786432
-	JNE  LBB0_32
-	LONG $0x300000a9; BYTE $0x00   // test	eax, 3145728
-	JNE  LBB0_34
-	LONG $0xc00000a9; BYTE $0x00   // test	eax, 12582912
-	JNE  LBB0_36
-	LONG $0x000000a9; BYTE $0x03   // test	eax, 50331648
-	JNE  LBB0_38
-	LONG $0x000000a9; BYTE $0x0c   // test	eax, 201326592
-	JNE  LBB0_40
-	LONG $0x000000a9; BYTE $0x30   // test	eax, 805306368
-	JNE  LBB0_42
-	LONG $0xffffff3d; BYTE $0x3f   // cmp	eax, 1073741823
-	JBE  LBB0_5
-	LONG $0x000fb841; WORD $0x0000 // mov	r8d, 15
-	JMP  LBB0_13
-
-LBB0_6:
-	WORD $0x3948; BYTE $0xc8 // cmp	rax, rcx
+LBB0_4:
+	LONG $0x34394266; BYTE $0x47 // cmp	word ptr [rdi + 2*r8], si
 	JAE  LBB0_9
+	WORD $0xff49; BYTE $0xc0     // inc	r8
+	WORD $0x394c; BYTE $0xc1     // cmp	rcx, r8
+	JNE  LBB0_4
+	JMP  LBB0_10
 
-LBB0_7:
-	LONG $0x47343966         // cmp	word ptr [rdi + 2*rax], si
-	JAE  LBB0_14
-	WORD $0xff48; BYTE $0xc0 // inc	rax
-	WORD $0x3948; BYTE $0xc1 // cmp	rcx, rax
-	JNE  LBB0_7
-	JMP  LBB0_9
+LBB0_8:
+	WORD $0xbc0f; BYTE $0xc0 // bsf	eax, eax
+	WORD $0xe8d1             // shr	eax
+	WORD $0x0949; BYTE $0xc1 // or	r9, rax
+	WORD $0x894d; BYTE $0xc8 // mov	r8, r9
 
-LBB0_16:
-	LONG $0x0001b841; WORD $0x0000 // mov	r8d, 1
-	JMP  LBB0_13
-
-LBB0_18:
-	LONG $0x0002b841; WORD $0x0000 // mov	r8d, 2
-	JMP  LBB0_13
-
-LBB0_20:
-	LONG $0x0003b841; WORD $0x0000 // mov	r8d, 3
-	JMP  LBB0_13
-
-LBB0_22:
-	LONG $0x0004b841; WORD $0x0000 // mov	r8d, 4
-	JMP  LBB0_13
-
-LBB0_24:
-	LONG $0x0005b841; WORD $0x0000 // mov	r8d, 5
-	JMP  LBB0_13
-
-LBB0_26:
-	LONG $0x0006b841; WORD $0x0000 // mov	r8d, 6
-	JMP  LBB0_13
-
-LBB0_28:
-	LONG $0x0007b841; WORD $0x0000 // mov	r8d, 7
-	JMP  LBB0_13
-
-LBB0_30:
-	LONG $0x0008b841; WORD $0x0000 // mov	r8d, 8
-	JMP  LBB0_13
-
-LBB0_32:
-	LONG $0x0009b841; WORD $0x0000 // mov	r8d, 9
-	JMP  LBB0_13
-
-LBB0_34:
-	LONG $0x000ab841; WORD $0x0000 // mov	r8d, 10
-	JMP  LBB0_13
-
-LBB0_36:
-	LONG $0x000bb841; WORD $0x0000 // mov	r8d, 11
-	JMP  LBB0_13
-
-LBB0_38:
-	LONG $0x000cb841; WORD $0x0000 // mov	r8d, 12
-	JMP  LBB0_13
-
-LBB0_40:
-	LONG $0x000db841; WORD $0x0000 // mov	r8d, 13
-	JMP  LBB0_13
-
-LBB0_42:
-	LONG $0x000eb841; WORD $0x0000 // mov	r8d, 14
-
-LBB0_13:
-	WORD $0x094d; BYTE $0xc1 // or	r9, r8
-	WORD $0x894c; BYTE $0xc8 // mov	rax, r9
-
-LBB0_14:
-	WORD $0x8948; BYTE $0x02 // mov	qword ptr [rdx], rax
+LBB0_9:
+	WORD $0x894c; BYTE $0x02 // mov	qword ptr [rdx], r8
 	WORD $0x8948; BYTE $0xec // mov	rsp, rbp
 	BYTE $0x5d               // pop	rbp
 	WORD $0xf8c5; BYTE $0x77 // vzeroupper

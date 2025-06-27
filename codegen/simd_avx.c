@@ -10,17 +10,7 @@ void _find16(uint16_t *input, uint16_t target, int64_t *result, uint64_t size) {
     
     if (size == 0) return;
     
-    // For small arrays, use scalar search
-    if (size <= 16) {
-        for (uint64_t i = 0; i < size; i++) {
-            if (input[i] >= target) {
-                *result = i;
-                return;
-            }
-        }
-        return;
-    }
-    
+
     // Broadcast target to all 16 lanes
     __m256i target_vec = _mm256_set1_epi16((int16_t)target);
     
@@ -39,13 +29,14 @@ void _find16(uint16_t *input, uint16_t target, int64_t *result, uint64_t size) {
         uint32_t mask = _mm256_movemask_epi8(cmp_ge);
         
         if (mask != 0) {
-            // Found a match, find the first set bit
-            for (int j = 0; j < 16; j++) {
-                if ((mask >> (j * 2)) & 0x3) {
-                    *result = i + j;
-                    return;
-                }
-            }
+            // Use tzcnt to find the first set bit efficiently
+            uint32_t first_bit = _tzcnt_u32(mask);
+            
+            // Since each uint16_t produces 2 bytes in the mask, divide by 2
+            uint32_t element_index = first_bit / 2;
+            
+            *result = i + element_index;
+            return;
         }
     }
     

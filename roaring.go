@@ -107,7 +107,7 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 // ctrFind finds the container for the given high bits (read-only, no creation)
 // Returns (index, found) where index is the insertion point if not found
 func (rb *Bitmap) ctrFind(hi uint16) (int, bool) {
-	const blockSize = 64
+	const blockSize = 32
 
 	index, n := rb.index, len(rb.index)
 	switch {
