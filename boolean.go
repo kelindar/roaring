@@ -104,7 +104,7 @@ func (rb *Bitmap) andContainers(c1, c2 *container) bool {
 
 // arrAndArr performs AND between two array containers
 func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
-	a, b := c1.arr(), c2.arr()
+	a, b := c1.Data, c2.Data
 	i, j, k := 0, 0, 0
 	for i < len(a) && j < len(b) {
 		av, bv := a[i], b[j]
@@ -128,7 +128,7 @@ func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 
 // arrAndBmp performs AND between array and bitmap containers
 func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
-	a, b := c1.arr(), c2.bmp()
+	a, b := c1.Data, c2.bmp()
 	out := a[:0]
 
 	for _, val := range a {
@@ -144,7 +144,7 @@ func (rb *Bitmap) arrAndBmp(c1, c2 *container) bool {
 
 // bmpAndArr performs AND between bitmap and array containers
 func (rb *Bitmap) bmpAndArr(c1, c2 *container) bool {
-	a, b := c1.bmp(), c2.arr()
+	a, b := c1.bmp(), c2.Data
 	out := make([]uint16, 0, len(b))
 
 	for _, val := range b {
@@ -232,7 +232,7 @@ func (rb *Bitmap) andContainerRun(c1, c2 *container) bool {
 
 	switch c1.Type {
 	case typeArray:
-		arr := c1.arr()
+		arr := c1.Data
 		result := arr[:0]
 
 		for _, val := range arr {
