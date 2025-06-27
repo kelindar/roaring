@@ -190,47 +190,23 @@ func (r *B) saveResult(result Result) {
 	}
 }
 
-// formatResult formats statistical comparison between samples
-func (r *B) formatResult(ourSamples, refSamples []float64) string {
+// formatComparison formats statistical comparison between two sample sets
+func (r *B) formatComparison(ourSamples, otherSamples []float64) string {
+	if len(otherSamples) == 0 {
+		return "new"
+	}
+
 	our := tinystat.Summarize(ourSamples)
-	ref := tinystat.Summarize(refSamples)
-	if ref.Mean == 0 {
+	other := tinystat.Summarize(otherSamples)
+	if other.Mean == 0 {
 		if our.Mean > 0 {
 			return "✅ inf"
 		}
 		return "~ 1.00x"
 	}
 
-	speedup := our.Mean / ref.Mean
-	diff := tinystat.Compare(our, ref, 99)
-	if !diff.Significant() {
-		return fmt.Sprintf("~ %.2fx (p=%.3f)", speedup, diff.PValue)
-	}
-
-	if speedup > 1 {
-		return fmt.Sprintf("✅ %.2fx (p=%.3f)", speedup, diff.PValue)
-	}
-
-	return fmt.Sprintf("❌ %.2fx (p=%.3f)", speedup, diff.PValue)
-}
-
-// formatDelta formats comparison between current and previous runs
-func (r *B) formatDelta(current, previous Result) string {
-	if len(previous.Samples) == 0 {
-		return "new"
-	}
-
-	curr := tinystat.Summarize(current.Samples)
-	prev := tinystat.Summarize(previous.Samples)
-	if prev.Mean == 0 {
-		if curr.Mean > 0 {
-			return "✅ inf"
-		}
-		return "~ 1.00x"
-	}
-
-	speedup := curr.Mean / prev.Mean
-	diff := tinystat.Compare(curr, prev, 99)
+	speedup := our.Mean / other.Mean
+	diff := tinystat.Compare(our, other, 99)
 	if !diff.Significant() {
 		return fmt.Sprintf("~ %.2fx (p=%.3f)", speedup, diff.PValue)
 	}
@@ -293,14 +269,14 @@ func (r *B) Run(name string, ourFn func(), refFn ...func()) {
 	prevResult, exists := prevResults[name]
 	delta := "new"
 	if exists {
-		delta = r.formatDelta(result, prevResult)
+		delta = r.formatComparison(ourSamples, prevResult.Samples)
 	}
 
 	// Calculate vs reference if provided
 	vsRef := ""
 	if len(refFn) > 0 && refFn[0] != nil {
 		refSamples, _ := r.benchmark(refFn[0])
-		vsRef = r.formatResult(ourSamples, refSamples)
+		vsRef = r.formatComparison(ourSamples, refSamples)
 	}
 
 	// Format and display result
