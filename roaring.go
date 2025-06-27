@@ -137,6 +137,8 @@ func (rb *Bitmap) ctrDel(pos int) {
 // find16 returns the first index whose value is ≥ target.
 // If the value equals target, found == true.
 // If not found, index is the insertion point to keep the slice sorted.
+//
+//go:nosplit
 func find16(a []uint16, target uint16) (index int, found bool) {
 	n := len(a)
 	switch {
@@ -149,7 +151,7 @@ func find16(a []uint16, target uint16) (index int, found bool) {
 	}
 
 	// binary phase: shrink search window to ≤16
-	lo, hi := 0, n // hi is exclusive
+	lo, hi := 0, n
 	for hi-lo > 16 {
 		mid := (lo + hi) >> 1
 		switch {

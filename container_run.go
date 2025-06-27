@@ -1,19 +1,18 @@
 package roaring
 
 func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
-	runs := len(c.Data) >> 1 // number of (start,end) pairs
-
+	n := len(c.Data) >> 1
 	switch {
-	case runs == 0:
+	case n == 0:
 		return [2]int{0, 0}, false
 	case value < c.Data[0]:
 		return [2]int{0, 0}, false
-	case value > c.Data[(runs-1)*2+1]:
-		return [2]int{runs, runs}, false
+	case value > c.Data[(n-1)*2+1]:
+		return [2]int{n, n}, false
 	}
 
 	// binary phase: shrink window to ≤4 runs
-	lo, hi := 0, runs // hi is exclusive
+	lo, hi := 0, n
 	for hi-lo > 4 {
 		mid := (lo + hi) >> 1
 		start := c.Data[mid*2]
