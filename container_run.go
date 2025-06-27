@@ -180,7 +180,7 @@ func (c *container) runToArray() {
 	// Create new array data
 	c.Data = make([]uint16, c.Size)
 	c.Type = typeArray
-	dst := c.arr()
+	dst := c.Data
 
 	// Copy all values to the array
 	idx := 0

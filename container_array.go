@@ -1,26 +1,20 @@
 package roaring
 
-// arr converts the container to an []uint16
-func (c *container) arr() []uint16 {
-	return c.Data
-}
-
 // arrSet sets a value in an array container
 func (c *container) arrSet(value uint16) bool {
-	idx, exists := find16(c.arr(), value)
+	idx, exists := find16(c.Data, value)
 	if exists {
 		return false // Already exists
 	}
 
 	// Insert at position idx more efficiently
-	array := c.arr()
-	oldLen := len(array)
+	oldLen := len(c.Data)
 	c.Data = append(c.Data, 0) // Add space for new uint16
-	newArray := c.arr()
+	newArray := c.Data
 
 	// Move elements to the right using bulk copy
 	if idx < oldLen {
-		copy(newArray[idx+1:], array[idx:])
+		copy(newArray[idx+1:], c.Data[idx:])
 	}
 
 	newArray[idx] = value
@@ -30,14 +24,13 @@ func (c *container) arrSet(value uint16) bool {
 
 // arrDel removes a value from an array container
 func (c *container) arrDel(value uint16) bool {
-	idx, exists := find16(c.arr(), value)
+	idx, exists := find16(c.Data, value)
 	if !exists {
 		return false
 	}
 
 	// Remove element at index idx
-	array := c.arr()
-	copy(array[idx:], array[idx+1:])
+	copy(c.Data[idx:], c.Data[idx+1:])
 	c.Data = c.Data[:len(c.Data)-1] // Shrink by one uint16
 	c.Size--
 	return true
@@ -45,7 +38,7 @@ func (c *container) arrDel(value uint16) bool {
 
 // arrHas checks if a value exists in an array container
 func (c *container) arrHas(value uint16) bool {
-	_, exists := find16(c.arr(), value)
+	_, exists := find16(c.Data, value)
 	return exists
 }
 
@@ -61,14 +54,13 @@ func (c *container) arrOptimize() {
 
 // arrIsDense quickly estimates if converting to run container would be beneficial
 func (c *container) arrIsDense() bool {
-	array := c.arr()
-	if len(array) < 128 {
+	if len(c.Data) < 128 {
 		return false
 	}
 
-	lo, hi := array[0], array[len(array)-1]
+	lo, hi := c.Data[0], c.Data[len(c.Data)-1]
 	span := int(hi - lo + 1)
-	size := len(array)
+	size := len(c.Data)
 
 	// Quick density filters
 	density := float64(size) / float64(span)
@@ -93,25 +85,24 @@ func (c *container) arrIsDense() bool {
 
 // arrToRun attempts to convert array to run in a single pass
 func (c *container) arrToRun() bool {
-	array := c.arr()
-	if len(array) == 0 {
+	if len(c.Data) == 0 {
 		return false
 	}
-	runsData := make([]uint16, 0, len(array)/2) // estimate runs needed
+	runsData := make([]uint16, 0, len(c.Data)/2) // estimate runs needed
 
 	// Single iteration: build runs AND count them
-	i0 := array[0]
-	i1 := array[0]
+	i0 := c.Data[0]
+	i1 := c.Data[0]
 
-	for i := 1; i < len(array); i++ {
-		if array[i] == i1+1 {
+	for i := 1; i < len(c.Data); i++ {
+		if c.Data[i] == i1+1 {
 			// Continue current run
-			i1 = array[i]
+			i1 = c.Data[i]
 		} else {
 			// End current run and start new one
 			runsData = append(runsData, i0, i1)
-			i0 = array[i]
-			i1 = array[i]
+			i0 = c.Data[i]
+			i1 = c.Data[i]
 		}
 	}
 
@@ -120,11 +111,11 @@ func (c *container) arrToRun() bool {
 
 	// Check conversion criteria with the actual run count
 	numRuns := len(runsData) / 2
-	sizeAsArray := len(array) * 2
+	sizeAsArray := len(c.Data) * 2
 	sizeAsRun := numRuns*4 + 2 // 2 uint16 per run = 4 bytes
 
 	// Only convert if we save at least 25% space and have reasonable compression
-	shouldConvert := sizeAsRun < sizeAsArray*3/4 && numRuns <= len(array)/3
+	shouldConvert := sizeAsRun < sizeAsArray*3/4 && numRuns <= len(c.Data)/3
 	if shouldConvert {
 		c.Data = runsData
 		c.Type = typeRun
@@ -136,7 +127,7 @@ func (c *container) arrToRun() bool {
 
 // arrToBmp converts this container from array to bitmap
 func (c *container) arrToBmp() {
-	src := c.arr()
+	src := c.Data
 
 	// Create bitmap data (65536 bits = 8192 bytes = 4096 uint16s)
 	c.Data = make([]uint16, 4096)

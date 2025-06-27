@@ -153,7 +153,7 @@ func (c *container) bmpToArr() {
 	c.Type = typeArray
 
 	// Copy all values to the array efficiently
-	dst := c.arr()
+	dst := c.Data
 	idx := 0
 	src.Range(func(value uint32) {
 		dst[idx] = uint16(value)
