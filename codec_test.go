@@ -13,20 +13,26 @@ import (
 
 func makeTestBitmap() *Bitmap {
 	rb := New()
+
 	// Array container
 	rb.Set(1)
 	rb.Set(5)
 	rb.Set(10)
+
 	// Bitmap container
-	for i := 65536; i < 65536+5000; i += 3 {
+	for i := 0xFFFF; i < 0xFFFF+0x5FFF; i += 3 {
 		rb.Set(uint32(i))
 	}
+
 	// Run container
-	for i := 131072; i < 131072+100; i++ {
+	for i := 131072; i < 131072+1000; i++ {
 		rb.Set(uint32(i))
 	}
+
 	// Max uint32
 	rb.Set(4294967295)
+
+	rb.Optimize()
 	return rb
 }
 
@@ -102,4 +108,24 @@ func TestCodec_SparseRandom(t *testing.T) {
 	data := rb.ToBytes()
 	rb2 := FromBytes(data)
 	bitmapsEqual(t, rb, rb2)
+}
+
+func TestCodec_BigEndian(t *testing.T) {
+	data := []uint16{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+
+	var buf1 bytes.Buffer
+	assert.NoError(t, writeUint16s(&buf1, true, data))
+
+	var buf2 bytes.Buffer
+	assert.NoError(t, writeUint16s(&buf2, false, data))
+
+	assert.Equal(t, buf1.Bytes(), buf2.Bytes())
+
+	out1, err := readUint16s(&buf1, true, len(data)*2)
+	assert.NoError(t, err)
+	assert.Equal(t, data, out1)
+
+	out2, err := readUint16s(&buf2, false, len(data)*2)
+	assert.NoError(t, err)
+	assert.Equal(t, data, out2)
 }
