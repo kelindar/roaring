@@ -73,6 +73,11 @@ func newContainer(typ ctype, data ...uint32) *container {
 
 // arrToRun attempts to convert array to run in a single pass
 func arrToRun(c *container) {
+	c.Type = typeRun
+	if len(c.Data) == 0 {
+		return
+	}
+
 	runsData := make([]uint16, 0, len(c.Data)/2)
 	i0 := c.Data[0]
 	i1 := c.Data[0]
@@ -88,7 +93,7 @@ func arrToRun(c *container) {
 	}
 
 	c.Data = append(runsData, i0, i1)
-	c.Type = typeRun
+
 }
 
 // testPair creates both our bitmap and reference bitmap with same data
