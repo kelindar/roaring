@@ -404,3 +404,22 @@ func TestEdgeCases(t *testing.T) {
 		}
 	})
 }
+
+func TestRangeStop(t *testing.T) {
+	rb := New()
+	rb.ctrAdd(0, 0, newBmpPermutations())
+
+	var count int
+	for i := 1; i < 64; i++ {
+		rb.Range(func(x uint32) bool {
+			if x >= uint32(i) {
+				count++
+				return false
+			}
+
+			return true
+		})
+	}
+
+	assert.Equal(t, 63, count)
+}

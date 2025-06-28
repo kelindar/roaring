@@ -16,9 +16,11 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 			}
 
 		case typeBitmap:
-			c.bmpRange(func(value uint32) bool {
+			if !c.bmpRange(func(value uint32) bool {
 				return fn(base | value)
-			})
+			}) {
+				return
+			}
 
 		case typeRun:
 			numRuns := len(c.Data) / 2
@@ -91,7 +93,7 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 }
 
 // Iterate iterates over all of the bits set to one in this bitmap.
-func (c *container) bmpRange(fn func(x uint32) bool) {
+func (c *container) bmpRange(fn func(x uint32) bool) bool {
 	dst := c.bmp()
 	for blkAt := 0; blkAt < len(dst); blkAt++ {
 		blk := dst[blkAt]
@@ -106,117 +108,118 @@ func (c *container) bmpRange(fn func(x uint32) bool) {
 			switch blk & 0b1111 {
 			case 0b0001:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 			case 0b0010:
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 			case 0b0011:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 			case 0b0100:
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 			case 0b0101:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 			case 0b0110:
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 			case 0b0111:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 			case 0b1000:
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			case 0b1001:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			case 0b1010:
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			case 0b1011:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			case 0b1100:
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			case 0b1101:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			case 0b1110:
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			case 0b1111:
 				if !fn(offset + 0) {
-					return
+					return false
 				}
 				if !fn(offset + 1) {
-					return
+					return false
 				}
 				if !fn(offset + 2) {
-					return
+					return false
 				}
 				if !fn(offset + 3) {
-					return
+					return false
 				}
 			}
 			offset += 4
 		}
 	}
+	return true
 }
