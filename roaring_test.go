@@ -497,18 +497,18 @@ func TestMinMax(t *testing.T) {
 
 	t.Run("maxZero", func(t *testing.T) {
 		for _, tc := range []testCase{
-			{"arr empty", newArr(), 4294967295, true},
-			{"arr single", newArr(42), 4294967295, true},
-			{"arr multiple", newArr(10, 20, 30), 4294967295, true},
-			{"arr boundary", newArr(0, 65535), 4294967295, true},
-			{"bmp empty", newBmp(), 4294967295, true},
-			{"bmp single", newBmp(42), 4294967295, true},
-			{"bmp multiple", newBmp(10, 20, 30), 4294967295, true},
-			{"bmp boundary", newBmp(0, 65535), 4294967295, true},
-			{"run empty", newRun(), 4294967295, true},
-			{"run single", newRun(42), 4294967295, true},
-			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 4294967295, true},
-			{"run boundary", newRun(0, 65535), 4294967295, true},
+			{"arr empty", newArr(), 0, true},
+			{"arr single", newArr(42), 41, true},
+			{"arr multiple", newArr(10, 20, 30), 29, true},
+			{"arr boundary", newArr(0, 65535), 65534, true},
+			{"bmp empty", newBmp(), 0, true},
+			{"bmp single", newBmp(42), 41, true},
+			{"bmp multiple", newBmp(10, 20, 30), 29, true},
+			{"bmp boundary", newBmp(0, 65535), 65534, true},
+			{"run empty", newRun(), 0, true},
+			{"run single", newRun(42), 41, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 13, true},
+			{"run boundary", newRun(0, 1, 65535), 65534, true},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				rb, _ := bitmapWith(tc.cnr)

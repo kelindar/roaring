@@ -202,43 +202,48 @@ func (rb *Bitmap) MinZero() (uint32, bool) {
 
 // MaxZero get the last zero bit and return its index, assuming bitmap is not empty
 func (rb *Bitmap) MaxZero() (uint32, bool) {
-	// Check after last container first
 	if len(rb.containers) == 0 {
-		return 4294967295, true // Empty bitmap, max uint32 is unset
+		return 4294967295, true
 	}
 
-	lastHi := rb.index[len(rb.containers)-1]
+	// Check if the bitmap extends to the very end of the 32-bit space.
+	// If not, the max zero is the end of the address space.
+	lastIdx := len(rb.containers) - 1
+	lastHi := rb.index[lastIdx]
+	lastC := &rb.containers[lastIdx]
 	if lastHi < 65535 {
-		return 4294967295, true // Max uint32 is unset
+		return 4294967295, true
+	}
+	if max, ok := lastC.max(); !ok || max < 65535 {
+		return 4294967295, true
 	}
 
-	// Check within last container
-	if maxZero, ok := rb.containers[len(rb.containers)-1].maxZero(); ok {
-		return uint32(lastHi)<<16 | uint32(maxZero), true
-	}
+	// The bitmap extends to the end, so we need to find a gap.
+	// Search backwards from the last container.
+	for i := lastIdx; i >= 0; i-- {
+		c := &rb.containers[i]
+		key := rb.index[i]
 
-	// Check gaps between containers (backwards)
-	for i := len(rb.containers) - 1; i > 0; i-- {
-		currentHi := rb.index[i]
-		prevHi := rb.index[i-1]
-
-		// If there's a gap between containers
-		if currentHi > prevHi+1 {
-			return uint32(currentHi-1)<<16 | 65535, true
+		// Check for a zero within the container
+		if maxZero, ok := c.maxZero(); ok {
+			return (uint32(key) << 16) | uint32(maxZero), true
 		}
 
-		// Check within the previous container
-		if maxZero, ok := rb.containers[i-1].maxZero(); ok {
-			return uint32(prevHi)<<16 | uint32(maxZero), true
+		// Check for a gap before this container
+		if i > 0 {
+			prevKey := rb.index[i-1]
+			if key > prevKey+1 {
+				return (uint32(key-1) << 16) | 65535, true
+			}
 		}
 	}
 
-	// Check before first container
-	if len(rb.containers) > 0 && rb.index[0] > 0 {
-		return uint32(rb.index[0]-1)<<16 | 65535, true
+	// Check for a gap before the very first container
+	if rb.index[0] > 0 {
+		return (uint32(rb.index[0]-1) << 16) | 65535, true
 	}
 
-	return 0, false // No zero bits found
+	return 0, false // Bitmap is completely full
 }
 
 // ---------------------------------------- Container ----------------------------------------
