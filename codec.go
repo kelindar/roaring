@@ -23,6 +23,14 @@ func (rb *Bitmap) ToBytes() []byte {
 // WriteTo writes the bitmap to a writer
 func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 	var n int64
+
+	// Write number of containers
+	count := uint32(len(rb.containers))
+	if err := binary.Write(w, binary.LittleEndian, count); err != nil {
+		return n, err
+	}
+	n += 4
+
 	for i, c := range rb.containers {
 		key := rb.index[i]
 
@@ -46,8 +54,8 @@ func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 			payload = c.Data[:len(c.Data)]
 			sizeBytes = uint32(len(payload)) * 2
 		case typeBitmap:
-			payload = c.Data[:4096]
-			sizeBytes = 4096 * 2
+			payload = c.Data[:4096] // Bitmap containers always have a fixed size of 4096 uint16s
+			sizeBytes = uint32(len(payload)) * 2
 		case typeRun:
 			payload = c.Data[:len(c.Data)]
 			sizeBytes = uint32(len(payload)) * 2
@@ -74,12 +82,17 @@ func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 func (rb *Bitmap) ReadFrom(r io.Reader) (int64, error) {
 	rb.Clear()
 	var n int64
-	for {
+
+	// Read number of containers
+	var count uint32
+	if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
+		return n, err
+	}
+	n += 4
+
+	for i := uint32(0); i < count; i++ {
 		var key uint16
 		if err := binary.Read(r, binary.LittleEndian, &key); err != nil {
-			if err == io.EOF {
-				break
-			}
 			return n, err
 		}
 		n += 2
