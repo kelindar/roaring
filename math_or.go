@@ -229,7 +229,6 @@ func (rb *Bitmap) bmpOrRun(c1, c2 *container) {
 
 // runOrArr performs OR between run and array containers
 func (rb *Bitmap) runOrArr(c1, c2 *container) {
-	// Convert to array for simpler merging, then optimize
 	c1.runToArray()
 	rb.arrOrArr(c1, c2)
 	c1.optimize()
@@ -237,7 +236,6 @@ func (rb *Bitmap) runOrArr(c1, c2 *container) {
 
 // runOrBmp performs OR between run and bitmap containers
 func (rb *Bitmap) runOrBmp(c1, c2 *container) {
-	// Convert run to bitmap and merge
 	c1.runToBmp()
 	rb.bmpOrBmp(c1, c2)
 }

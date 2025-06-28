@@ -7,9 +7,11 @@ import (
 	"github.com/kelindar/bitmap"
 )
 
+const bitmapSize = 4096
+
 var pool = sync.Pool{
 	New: func() any {
-		return make([]uint16, 4096)
+		return make([]uint16, 0, bitmapSize)
 	},
 }
 
@@ -18,7 +20,17 @@ func borrowArray() []uint16 {
 }
 
 func borrowBitmap() bitmap.Bitmap {
-	return asBitmap(borrowArray())
+	arr := borrowArray()
+	if cap(arr) < bitmapSize {
+		arr = make([]uint16, bitmapSize)
+	}
+
+	// Clear the memory to ensure clean bitmap
+	out := asBitmap(arr[:bitmapSize])
+	for i := range out {
+		out[i] = 0
+	}
+	return out
 }
 
 func release(v any) {
