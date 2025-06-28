@@ -189,14 +189,3 @@ func (c *container) bmpMinZero() (uint16, bool) {
 	}
 	return uint16(v), true
 }
-
-// bmpMaxZero returns the largest unset value in a bitmap container
-func (c *container) bmpMaxZero() (uint16, bool) {
-	bmp := c.bmp()
-	v, ok := bmp.MaxZero()
-	if !ok {
-		return 0, false
-	}
-
-	return uint16(v), true
-}

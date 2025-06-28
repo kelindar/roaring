@@ -82,19 +82,18 @@ func (c *container) runDel(value uint16) bool {
 	}
 
 	idx := search[0]
-	start := c.Data[idx*2]
-	end := c.Data[idx*2+1]
-
+	r0 := c.Data[idx*2]
+	r1 := c.Data[idx*2+1]
 	switch {
-	case start == end:
+	case r0 == r1:
 		c.runRemoveRunAt(idx)
-	case value == start:
+	case value == r0:
 		c.Data[idx*2] = value + 1
-	case value == end:
+	case value == r1:
 		c.Data[idx*2+1] = value - 1
 	default:
 		c.Data[idx*2+1] = value - 1
-		c.runInsertRunAt(idx+1, value+1, end)
+		c.runInsertRunAt(idx+1, value+1, r1)
 	}
 
 	c.Size--
@@ -188,11 +187,11 @@ func (c *container) runToArray() {
 	// Copy all values to the array
 	idx := 0
 	for i := 0; i < numRuns; i++ {
-		start, end := srcData[i*2], srcData[i*2+1]
-		for value := start; value <= end; value++ {
+		r0, r1 := srcData[i*2], srcData[i*2+1]
+		for value := r0; value <= r1; value++ {
 			dst[idx] = value
 			idx++
-			if value == end {
+			if value == r1 {
 				break // Prevent uint16 overflow when end is 65535
 			}
 		}
@@ -210,10 +209,10 @@ func (c *container) runToBmp() {
 	dst := c.bmp()
 
 	for i := 0; i < numRuns; i++ {
-		start, end := srcData[i*2], srcData[i*2+1]
-		for v := start; v <= end; v++ {
+		r0, r1 := srcData[i*2], srcData[i*2+1]
+		for v := r0; v <= r1; v++ {
 			dst.Set(uint32(v))
-			if v == end {
+			if v == r1 {
 				break // Prevent uint16 overflow when end is 65535
 			}
 		}
@@ -238,64 +237,28 @@ func (c *container) runMax() (uint16, bool) {
 
 // runMinZero returns the smallest unset value in a run container
 func (c *container) runMinZero() (uint16, bool) {
-	if len(c.Data) == 0 {
-		return 0, true // Empty container, 0 is unset
-	}
-
-	numRuns := len(c.Data) / 2
-
-	// Check if 0 is unset (before first run)
-	if c.Data[0] > 0 {
+	switch {
+	case len(c.Data) == 0:
+		return 0, true
+	case c.Data[0] > 0:
 		return 0, true
 	}
 
 	// Find first gap between runs
-	for i := 0; i < numRuns-1; i++ {
-		currentEnd := c.Data[i*2+1]
-		nextStart := c.Data[(i+1)*2]
-
-		if nextStart > currentEnd+1 {
-			return currentEnd + 1, true
+	n := len(c.Data) / 2
+	for i := 0; i < n-1; i++ {
+		r0 := c.Data[i*2+1]
+		r1 := c.Data[(i+1)*2]
+		if r1 > r0+1 {
+			return r0 + 1, true
 		}
 	}
 
 	// Check if there's a gap after the last run
-	lastEnd := c.Data[(numRuns-1)*2+1]
+	lastEnd := c.Data[(n-1)*2+1]
 	if lastEnd < 65535 {
 		return lastEnd + 1, true
 	}
 
-	return 0, false // No gaps found, all values 0-65535 are covered
-}
-
-// runMaxZero returns the largest unset value in a run container
-func (c *container) runMaxZero() (uint16, bool) {
-	if len(c.Data) == 0 {
-		return 65535, true // Empty container, 65535 is unset
-	}
-
-	numRuns := len(c.Data) / 2
-
-	// Check if 65535 is unset (after last run)
-	lastEnd := c.Data[(numRuns-1)*2+1]
-	if lastEnd < 65535 {
-		return 65535, true
-	}
-
-	// Find last gap between runs (search backwards)
-	for i := numRuns - 1; i > 0; i-- {
-		currentStart := c.Data[i*2]
-		prevEnd := c.Data[(i-1)*2+1]
-
-		if currentStart > prevEnd+1 {
-			return currentStart - 1, true
-		}
-	}
-
-	// Check if there's a gap before the first run
-	if c.Data[0] > 0 {
-		return c.Data[0] - 1, true
-	}
-
-	return 0, false // No gaps found, all values 0-65535 are covered
+	return 0, false
 }

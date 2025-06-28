@@ -51,37 +51,45 @@ func newBmpPermutations() *container {
 }
 
 func newContainer(typ ctype, data ...uint32) *container {
-	var backing []uint16
-	switch typ {
-	case typeBitmap:
-		backing = make([]uint16, 4096)
-	default:
-		backing = make([]uint16, 0, len(data))
-	}
-
 	c := &container{
-		Type: typ,
-		Data: backing,
+		Type: typeArray,
+		Data: make([]uint16, 0, len(data)),
 	}
 
 	for _, v := range data {
-		switch c.Type {
-		case typeArray:
-			c.arrSet(uint16(v))
-		case typeBitmap:
-			c.bmpSet(uint16(v))
-		case typeRun:
-			c.runSet(uint16(v))
-		}
+		c.arrSet(uint16(v))
 	}
 
-	if c.Type == typeRun {
-		c.runOptimize()
+	switch typ {
+	case typeBitmap:
+		c.arrToBmp()
+	case typeRun:
+		arrToRun(c) // force
 	}
 	return c
 }
 
 // ---------------------------------------- Test Helpers ----------------------------------------
+
+// arrToRun attempts to convert array to run in a single pass
+func arrToRun(c *container) {
+	runsData := make([]uint16, 0, len(c.Data)/2)
+	i0 := c.Data[0]
+	i1 := c.Data[0]
+
+	for i := 1; i < len(c.Data); i++ {
+		if c.Data[i] == i1+1 {
+			i1 = c.Data[i]
+		} else {
+			runsData = append(runsData, i0, i1)
+			i0 = c.Data[i]
+			i1 = c.Data[i]
+		}
+	}
+
+	c.Data = append(runsData, i0, i1)
+	c.Type = typeRun
+}
 
 // testPair creates both our bitmap and reference bitmap with same data
 func testPair(data []uint32) (*Bitmap, *bitmap.Bitmap) {

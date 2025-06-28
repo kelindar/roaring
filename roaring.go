@@ -200,52 +200,6 @@ func (rb *Bitmap) MinZero() (uint32, bool) {
 	return 0, false // No zero bits found
 }
 
-// MaxZero get the last zero bit and return its index, assuming bitmap is not empty
-func (rb *Bitmap) MaxZero() (uint32, bool) {
-	if len(rb.containers) == 0 {
-		return 4294967295, true
-	}
-
-	// Check if the bitmap extends to the very end of the 32-bit space.
-	// If not, the max zero is the end of the address space.
-	lastIdx := len(rb.containers) - 1
-	lastHi := rb.index[lastIdx]
-	lastC := &rb.containers[lastIdx]
-	if lastHi < 65535 {
-		return 4294967295, true
-	}
-	if max, ok := lastC.max(); !ok || max < 65535 {
-		return 4294967295, true
-	}
-
-	// The bitmap extends to the end, so we need to find a gap.
-	// Search backwards from the last container.
-	for i := lastIdx; i >= 0; i-- {
-		c := &rb.containers[i]
-		key := rb.index[i]
-
-		// Check for a zero within the container
-		if maxZero, ok := c.maxZero(); ok {
-			return (uint32(key) << 16) | uint32(maxZero), true
-		}
-
-		// Check for a gap before this container
-		if i > 0 {
-			prevKey := rb.index[i-1]
-			if key > prevKey+1 {
-				return (uint32(key-1) << 16) | 65535, true
-			}
-		}
-	}
-
-	// Check for a gap before the very first container
-	if rb.index[0] > 0 {
-		return (uint32(rb.index[0]-1) << 16) | 65535, true
-	}
-
-	return 0, false // Bitmap is completely full
-}
-
 // ---------------------------------------- Container ----------------------------------------
 
 // ctrAdd inserts a container at the given position

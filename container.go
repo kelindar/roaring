@@ -116,10 +116,6 @@ func (c *container) tryOptimize() {
 
 // min returns the smallest value in the container
 func (c *container) min() (uint16, bool) {
-	if c.Size == 0 {
-		return 0, false
-	}
-
 	switch c.Type {
 	case typeArray:
 		return c.arrMin()
@@ -133,10 +129,6 @@ func (c *container) min() (uint16, bool) {
 
 // max returns the largest value in the container
 func (c *container) max() (uint16, bool) {
-	if c.Size == 0 {
-		return 0, false
-	}
-
 	switch c.Type {
 	case typeArray:
 		return c.arrMax()
@@ -150,10 +142,6 @@ func (c *container) max() (uint16, bool) {
 
 // minZero returns the smallest unset value in the container (0-65535 range)
 func (c *container) minZero() (uint16, bool) {
-	if c.Size == 65536 {
-		return 0, false // Container is full, no zero bits
-	}
-
 	switch c.Type {
 	case typeArray:
 		return c.arrMinZero()
@@ -161,23 +149,6 @@ func (c *container) minZero() (uint16, bool) {
 		return c.bmpMinZero()
 	case typeRun:
 		return c.runMinZero()
-	}
-	return 0, false
-}
-
-// maxZero returns the largest unset value in the container (0-65535 range)
-func (c *container) maxZero() (uint16, bool) {
-	if c.Size == 65536 {
-		return 0, false // Container is full, no zero bits
-	}
-
-	switch c.Type {
-	case typeArray:
-		return c.arrMaxZero()
-	case typeBitmap:
-		return c.bmpMaxZero()
-	case typeRun:
-		return c.runMaxZero()
 	}
 	return 0, false
 }
