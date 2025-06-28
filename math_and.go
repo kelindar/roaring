@@ -255,14 +255,5 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 // runAndBmp performs AND between run and bitmap containers
 func (rb *Bitmap) runAndBmp(c1, c2 *container) bool {
 	c1.runToBmp()
-
-	a, b := c1.bmp(), c2.bmp()
-	if a == nil || b == nil {
-		return false
-	}
-
-	a.And(b)
-	c1.Size = uint32(a.Count())
-	c1.optimize()
-	return c1.Size > 0
+	return rb.bmpAndBmp(c1, c2)
 }

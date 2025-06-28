@@ -51,5 +51,5 @@ func asBitmap(data []uint16) bitmap.Bitmap {
 }
 
 func asUint16s(data bitmap.Bitmap) []uint16 {
-	return unsafe.Slice((*uint16)(unsafe.Pointer(&data[0])), len(data))
+	return unsafe.Slice((*uint16)(unsafe.Pointer(&data[0])), len(data)*4)
 }
