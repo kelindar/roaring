@@ -29,7 +29,7 @@ func TestRange(t *testing.T) {
 
 			// Test Range output matches reference
 			var ourValues, refValues []uint32
-			our.Range(func(x uint32) { ourValues = append(ourValues, x) })
+			our.Range(func(x uint32) bool { ourValues = append(ourValues, x); return true })
 			ref.Range(func(x uint32) { refValues = append(refValues, x) })
 
 			assert.Equal(t, refValues, ourValues)
@@ -204,8 +204,9 @@ func TestFilter(t *testing.T) {
 		assert.False(t, rb.Contains(3)) // 3 % 5 != 0
 
 		// Verify all remaining values pass the predicate
-		rb.Range(func(x uint32) {
+		rb.Range(func(x uint32) bool {
 			assert.Equal(t, uint32(0), x%5, "Value %d should be divisible by 5", x)
+			return true
 		})
 	})
 
@@ -250,8 +251,9 @@ func TestRangeAndFilterConsistency(t *testing.T) {
 
 		// Use Range to collect remaining values
 		var remaining []uint32
-		rb.Range(func(x uint32) {
+		rb.Range(func(x uint32) bool {
 			remaining = append(remaining, x)
+			return true
 		})
 
 		// Sort both slices for comparison
@@ -285,8 +287,9 @@ func TestRangeAndFilterConsistency(t *testing.T) {
 		// Should have numbers divisible by 4: 4, 8, 12, 16, ..., 100
 		assert.Equal(t, 25, rb.Count()) // 100/4 = 25
 
-		rb.Range(func(x uint32) {
+		rb.Range(func(x uint32) bool {
 			assert.Equal(t, uint32(0), x%4, "Value %d should be divisible by 4", x)
+			return true
 		})
 	})
 }
@@ -318,7 +321,7 @@ func TestContainerTypes(t *testing.T) {
 
 			// Test Range
 			var result []uint32
-			our.Range(func(x uint32) { result = append(result, x) })
+			our.Range(func(x uint32) bool { result = append(result, x); return true })
 			assert.Equal(t, values, result)
 		})
 	}
@@ -333,7 +336,7 @@ func TestEdgeCases(t *testing.T) {
 		assert.Equal(t, 0, rb.Count())
 
 		var values []uint32
-		rb.Range(func(x uint32) { values = append(values, x) })
+		rb.Range(func(x uint32) bool { values = append(values, x); return true })
 		assert.Empty(t, values)
 	})
 
@@ -364,7 +367,7 @@ func TestEdgeCases(t *testing.T) {
 
 		// Test range maintains order
 		var result []uint32
-		rb.Range(func(x uint32) { result = append(result, x) })
+		rb.Range(func(x uint32) bool { result = append(result, x); return true })
 		assert.Equal(t, boundaries, result)
 	})
 
@@ -400,4 +403,23 @@ func TestEdgeCases(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestRangeStop(t *testing.T) {
+	rb := New()
+	rb.ctrAdd(0, 0, newBmpPermutations())
+
+	var count int
+	for i := 1; i < 64; i++ {
+		rb.Range(func(x uint32) bool {
+			if x >= uint32(i) {
+				count++
+				return false
+			}
+
+			return true
+		})
+	}
+
+	assert.Equal(t, 63, count)
 }

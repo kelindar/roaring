@@ -14,8 +14,9 @@ func bitmapWith(c *container) (*Bitmap, []uint16) {
 
 func valuesOf(v *Bitmap) []uint16 {
 	out := []uint16{}
-	v.Range(func(x uint32) {
+	v.Range(func(x uint32) bool {
 		out = append(out, uint16(x))
+		return true
 	})
 	return out
 }
@@ -24,12 +25,26 @@ func newArr(data ...uint32) *container {
 	return newContainer(typeArray, data...)
 }
 
+func newRun(data ...uint32) *container {
+	return newContainer(typeRun, data...)
+}
+
 func newBmp(data ...uint32) *container {
 	return newContainer(typeBitmap, data...)
 }
 
-func newRun(data ...uint32) *container {
-	return newContainer(typeRun, data...)
+// newBmpPermutations creates a Bitmap with all 16 4-bit permutations
+func newBmpPermutations() *container {
+	rb := newBmp()
+	for perm := 0; perm < 16; perm++ {
+		offset := perm * 4
+		for bit := 0; bit < 4; bit++ {
+			if (perm>>bit)&1 == 1 {
+				rb.bmpSet(uint16(offset + bit))
+			}
+		}
+	}
+	return rb
 }
 
 func newContainer(typ ctype, data ...uint32) *container {
