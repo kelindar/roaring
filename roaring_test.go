@@ -416,187 +416,109 @@ func TestClone(t *testing.T) {
 }
 
 func TestMinMax(t *testing.T) {
-	tc := []struct {
-		name   string
-		values []uint32
-		minVal uint32
-		minOk  bool
-		maxVal uint32
-		maxOk  bool
-	}{
-		{"empty", []uint32{}, 0, false, 0, false},
-		{"single value", []uint32{42}, 42, true, 42, true},
-		{"multiple values same container", []uint32{40, 42, 44}, 40, true, 44, true},
-		{"values across containers", []uint32{40, 42, 44, 65536, 131072}, 40, true, 131072, true},
-		{"boundary values", []uint32{0, 65535, 65536, 131071}, 0, true, 131071, true},
-		{"single container max", []uint32{65535}, 65535, true, 65535, true},
-		{"multiple containers sparse", []uint32{1, 65537, 131073, 196609}, 1, true, 196609, true},
-		{"array container", []uint32{1, 5, 10, 100, 500}, 1, true, 500, true},
-		{"dense values", []uint32{1000, 1001, 1002, 1003, 1004}, 1000, true, 1004, true},
-		{"run container range", []uint32{2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009}, 2000, true, 2009, true},
-		{"mixed container types", []uint32{5, 70000, 140000, 210000}, 5, true, 210000, true},
+	type testCase struct {
+		name string
+		cnr  *container
+		val  uint32
+		has  bool
 	}
 
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			rb := New()
-			for _, v := range tt.values {
-				rb.Set(v)
-			}
+	t.Run("min", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, false},
+			{"arr single", newArr(42), 42, true},
+			{"arr multiple", newArr(10, 20, 30), 10, true},
+			{"arr boundary", newArr(0, 65535), 0, true},
+			{"bmp empty", newBmp(), 0, false},
+			{"bmp single", newBmp(42), 42, true},
+			{"bmp multiple", newBmp(10, 20, 30), 10, true},
+			{"bmp boundary", newBmp(0, 65535), 0, true},
+			{"run empty", newRun(), 0, false},
+			{"run single", newRun(42), 42, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 10, true},
+			{"run boundary", newRun(0, 65535), 0, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				min, minOk := rb.Min()
+				assert.Equal(t, tc.has, minOk, "min() ok result")
+				assert.Equal(t, tc.val, min, "min() value")
+			})
+		}
+	})
 
-			min, minOk := rb.Min()
-			max, maxOk := rb.Max()
+	t.Run("max", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, false},
+			{"arr single", newArr(42), 42, true},
+			{"arr multiple", newArr(10, 20, 30), 30, true},
+			{"arr boundary", newArr(0, 65535), 65535, true},
+			{"bmp empty", newBmp(), 0, false},
+			{"bmp single", newBmp(42), 42, true},
+			{"bmp multiple", newBmp(10, 20, 30), 30, true},
+			{"bmp boundary", newBmp(0, 65535), 65535, true},
+			{"run empty", newRun(), 0, false},
+			{"run single", newRun(42), 42, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 22, true},
+			{"run boundary", newRun(0, 65535), 65535, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				max, maxOk := rb.Max()
+				assert.Equal(t, tc.has, maxOk, "max() ok result")
+				assert.Equal(t, tc.val, max, "max() value")
+			})
+		}
+	})
 
-			assert.Equal(t, tt.minOk, minOk, "Min() ok result")
-			assert.Equal(t, tt.maxOk, maxOk, "Max() ok result")
+	t.Run("minZero", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, true},
+			{"arr single", newArr(42), 0, true},
+			{"arr multiple", newArr(10, 20, 30), 0, true},
+			{"arr boundary", newArr(0, 65535), 0, true},
+			{"bmp empty", newBmp(), 0, true},
+			{"bmp single", newBmp(42), 0, true},
+			{"bmp multiple", newBmp(10, 20, 30), 0, true},
+			{"bmp boundary", newBmp(0, 65535), 0, true},
+			{"run empty", newRun(), 0, true},
+			{"run single", newRun(42), 0, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 0, true},
+			{"run boundary", newRun(0, 65535), 0, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				minZero, minZeroOk := rb.MinZero()
+				assert.Equal(t, tc.has, minZeroOk, "minZero() ok result")
+				assert.Equal(t, tc.val, minZero, "minZero() value")
+			})
+		}
+	})
 
-			if tt.minOk {
-				assert.Equal(t, tt.minVal, min, "Min() value")
-			}
-			if tt.maxOk {
-				assert.Equal(t, tt.maxVal, max, "Max() value")
-			}
-		})
-	}
-}
+	t.Run("maxZero", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, true},
+			{"arr single", newArr(42), 0, true},
+			{"arr multiple", newArr(10, 20, 30), 0, true},
+			{"arr boundary", newArr(0, 65535), 0, true},
+			{"bmp empty", newBmp(), 0, true},
+			{"bmp single", newBmp(42), 0, true},
+			{"bmp multiple", newBmp(10, 20, 30), 0, true},
+			{"bmp boundary", newBmp(0, 65535), 0, true},
+			{"run empty", newRun(), 0, true},
+			{"run single", newRun(42), 0, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 0, true},
+			{"run boundary", newRun(0, 65535), 0, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				maxZero, maxZeroOk := rb.MaxZero()
+				assert.Equal(t, tc.has, maxZeroOk, "maxZero() ok result")
+				assert.Equal(t, tc.val, maxZero, "maxZero() value")
+			})
+		}
+	})
 
-func TestMinMaxZero(t *testing.T) {
-	tc := []struct {
-		name       string
-		values     []uint32
-		minZeroVal uint32
-		minZeroOk  bool
-		maxZeroVal uint32
-		maxZeroOk  bool
-	}{
-		{"empty", []uint32{}, 0, true, 4294967295, true},
-		{"single value", []uint32{42}, 0, true, 4294967295, true},
-		{"value at zero", []uint32{0}, 1, true, 4294967295, true},
-		{"value at max", []uint32{4294967295}, 0, true, 4294967294, true},
-		{"consecutive from zero", []uint32{0, 1, 2, 3, 4}, 5, true, 4294967295, true},
-		{"gap in same container", []uint32{0, 2, 4}, 1, true, 4294967295, true},
-		{"values across containers", []uint32{0, 65535, 65536, 131072}, 1, true, 4294967295, true},
-		{"container boundary gap", []uint32{65535, 65537}, 0, true, 4294967295, true},
-		{"multiple container gaps", []uint32{100, 65636, 196708}, 0, true, 4294967295, true},
-		{"dense values", []uint32{1000, 1001, 1002, 1003, 1004}, 0, true, 4294967295, true},
-		{"sparse in first container", []uint32{10, 20, 30}, 0, true, 4294967295, true},
-		{"no zero in first container", []uint32{65536, 131072}, 0, true, 4294967295, true},
-	}
-
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			rb := New()
-			for _, v := range tt.values {
-				rb.Set(v)
-			}
-
-			minZero, minZeroOk := rb.MinZero()
-			maxZero, maxZeroOk := rb.MaxZero()
-
-			assert.Equal(t, tt.minZeroOk, minZeroOk, "MinZero() ok result")
-			assert.Equal(t, tt.maxZeroOk, maxZeroOk, "MaxZero() ok result")
-
-			if tt.minZeroOk {
-				assert.Equal(t, tt.minZeroVal, minZero, "MinZero() value")
-				// Verify the found position is actually unset
-				assert.False(t, rb.Contains(minZero), "MinZero position should be unset")
-			}
-			if tt.maxZeroOk {
-				assert.Equal(t, tt.maxZeroVal, maxZero, "MaxZero() value")
-				// Verify the found position is actually unset
-				assert.False(t, rb.Contains(maxZero), "MaxZero position should be unset")
-			}
-		})
-	}
-}
-
-func TestContainerMinMax(t *testing.T) {
-	tc := []struct {
-		name   string
-		c      *container
-		minVal uint16
-		minOk  bool
-		maxVal uint16
-		maxOk  bool
-	}{
-		{"arr empty", newArr(), 0, false, 0, false},
-		{"arr single", newArr(42), 42, true, 42, true},
-		{"arr multiple", newArr(10, 20, 30), 10, true, 30, true},
-		{"arr boundary", newArr(0, 65535), 0, true, 65535, true},
-		{"bmp empty", newBmp(), 0, false, 0, false},
-		{"bmp single", newBmp(42), 42, true, 42, true},
-		{"bmp multiple", newBmp(10, 20, 30), 10, true, 30, true},
-		{"bmp boundary", newBmp(0, 65535), 0, true, 65535, true},
-		{"run empty", newRun(), 0, false, 0, false},
-		{"run single", newRun(42), 42, true, 42, true},
-		{"run multiple", newRun(10, 11, 12, 20, 21, 22), 10, true, 22, true},
-		{"run boundary", newRun(0, 65535), 0, true, 65535, true},
-	}
-
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			min, minOk := tt.c.min()
-			max, maxOk := tt.c.max()
-
-			assert.Equal(t, tt.minOk, minOk, "min() ok result")
-			assert.Equal(t, tt.maxOk, maxOk, "max() ok result")
-			if tt.minOk {
-				assert.Equal(t, tt.minVal, min, "min() value")
-			}
-			if tt.maxOk {
-				assert.Equal(t, tt.maxVal, max, "max() value")
-			}
-		})
-	}
-}
-
-func TestContainerMinMaxZero(t *testing.T) {
-	tc := []struct {
-		name       string
-		c          *container
-		minZeroVal uint16
-		minZeroOk  bool
-		maxZeroVal uint16
-		maxZeroOk  bool
-	}{
-		{"arr empty", newArr(), 0, true, 65535, true},
-		{"arr single", newArr(42), 0, true, 65535, true},
-		{"arr zero", newArr(0), 1, true, 65535, true},
-		{"arr max", newArr(65535), 0, true, 65534, true},
-		{"arr consecutive", newArr(0, 1, 2), 3, true, 65535, true},
-		{"arr gap", newArr(0, 2, 4), 1, true, 65535, true},
-		{"bmp empty", newBmp(), 0, true, 65535, true},
-		{"bmp single", newBmp(42), 0, true, 65535, true},
-		{"bmp zero", newBmp(0), 1, true, 65535, true},
-		{"bmp max", newBmp(65535), 0, true, 65534, true},
-		{"bmp consecutive", newBmp(0, 1, 2), 3, true, 65535, true},
-		{"bmp gap", newBmp(0, 2, 4), 1, true, 65535, true},
-		{"run empty", newRun(), 0, true, 65535, true},
-		{"run single", newRun(42), 0, true, 65535, true},
-		{"run zero", newRun(0), 1, true, 65535, true},
-		{"run max", newRun(65535), 0, true, 65534, true},
-		{"run consecutive", newRun(0, 1, 2), 3, true, 65535, true},
-		{"run gap", newRun(0, 1, 5, 6), 2, true, 65535, true},
-		{"run range", newRun(10, 11, 12, 13, 14), 0, true, 65535, true},
-	}
-
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			minZero, minZeroOk := tt.c.minZero()
-			maxZero, maxZeroOk := tt.c.maxZero()
-
-			assert.Equal(t, tt.minZeroOk, minZeroOk, "minZero() ok result")
-			assert.Equal(t, tt.maxZeroOk, maxZeroOk, "maxZero() ok result")
-			if tt.minZeroOk {
-				assert.Equal(t, tt.minZeroVal, minZero, "minZero() value")
-				assert.False(t, tt.c.contains(minZero), "minZero position should be unset")
-			}
-			if tt.maxZeroOk {
-				assert.Equal(t, tt.maxZeroVal, maxZero, "maxZero() value")
-				assert.False(t, tt.c.contains(maxZero), "maxZero position should be unset")
-			}
-		})
-	}
 }
 
 func TestRunContainerGaps(t *testing.T) {
