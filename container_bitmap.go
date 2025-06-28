@@ -1,18 +1,15 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 import (
-	"unsafe"
-
 	"github.com/kelindar/bitmap"
 )
 
 // bmp converts the container to a bmp.Bitmap
 func (c *container) bmp() bitmap.Bitmap {
-	if len(c.Data) == 0 {
-		return nil
-	}
-
-	return bitmap.Bitmap(unsafe.Slice((*uint64)(unsafe.Pointer(&c.Data[0])), len(c.Data)/4))
+	return asBitmap(c.Data)
 }
 
 // bmpSet sets a value in a bitmap container
@@ -89,10 +86,10 @@ func (c *container) bmpIsDense() bool {
 	}
 
 	// Check if estimated conversion meets our criteria
-	sizeAsRun := runs*4 + 2
+	sizeAsRunContainer := runs*4 + 2
 	return runs <= 10 &&
-		sizeAsRun < 8192/4 &&
-		sizeAsRun < size
+		sizeAsRunContainer < 8192/4 &&
+		sizeAsRunContainer < size
 }
 
 // bmpToRun attempts to convert bitmap to run in a single pass
@@ -159,4 +156,30 @@ func (c *container) bmpToArr() {
 		dst[idx] = uint16(value)
 		idx++
 	})
+}
+
+// bmpMin returns the smallest value in a bitmap container
+func (c *container) bmpMin() (uint16, bool) {
+	if min, ok := c.bmp().Min(); ok {
+		return uint16(min), true
+	}
+	return 0, false
+}
+
+// bmpMax returns the largest value in a bitmap container
+func (c *container) bmpMax() (uint16, bool) {
+	if max, ok := c.bmp().Max(); ok {
+		return uint16(max), true
+	}
+	return 0, false
+}
+
+// bmpMinZero returns the smallest unset value in a bitmap container
+func (c *container) bmpMinZero() (uint16, bool) {
+	bmp := c.bmp()
+	v, ok := bmp.MinZero()
+	if !ok {
+		return 0, false
+	}
+	return uint16(v), true
 }

@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 // or performs OR with a single bitmap efficiently
@@ -155,12 +158,9 @@ func (rb *Bitmap) arrOrRun(c1, c2 *container) {
 	for _, val := range c1.Data {
 		// Add runs that come before this value
 		for runIdx*2+1 < len(runs) && runs[runIdx*2+1] < val {
-			start, end := runs[runIdx*2], runs[runIdx*2+1]
+			start, end := uint32(runs[runIdx*2]), uint32(runs[runIdx*2+1])
 			for v := start; v <= end; v++ {
-				out = append(out, v)
-				if v == end {
-					break // Prevent overflow
-				}
+				out = append(out, uint16(v))
 			}
 			runIdx++
 		}
@@ -176,12 +176,9 @@ func (rb *Bitmap) arrOrRun(c1, c2 *container) {
 
 	// Add remaining runs
 	for runIdx*2+1 < len(runs) {
-		start, end := runs[runIdx*2], runs[runIdx*2+1]
+		start, end := uint32(runs[runIdx*2]), uint32(runs[runIdx*2+1])
 		for v := start; v <= end; v++ {
-			out = append(out, v)
-			if v == end {
-				break // Prevent overflow
-			}
+			out = append(out, uint16(v))
 		}
 		runIdx++
 	}
@@ -220,14 +217,11 @@ func (rb *Bitmap) bmpOrRun(c1, c2 *container) {
 	runs := c2.Data
 
 	for i := 0; i < len(runs); i += 2 {
-		start, end := runs[i], runs[i+1]
+		start, end := uint32(runs[i]), uint32(runs[i+1])
 		for v := start; v <= end; v++ {
-			if !bmp.Contains(uint32(v)) {
-				bmp.Set(uint32(v))
+			if !bmp.Contains(v) {
+				bmp.Set(v)
 				c1.Size++
-			}
-			if v == end {
-				break // Prevent overflow
 			}
 		}
 	}
@@ -235,7 +229,6 @@ func (rb *Bitmap) bmpOrRun(c1, c2 *container) {
 
 // runOrArr performs OR between run and array containers
 func (rb *Bitmap) runOrArr(c1, c2 *container) {
-	// Convert to array for simpler merging, then optimize
 	c1.runToArray()
 	rb.arrOrArr(c1, c2)
 	c1.optimize()
@@ -243,7 +236,6 @@ func (rb *Bitmap) runOrArr(c1, c2 *container) {
 
 // runOrBmp performs OR between run and bitmap containers
 func (rb *Bitmap) runOrBmp(c1, c2 *container) {
-	// Convert run to bitmap and merge
 	c1.runToBmp()
 	rb.bmpOrBmp(c1, c2)
 }
@@ -256,8 +248,8 @@ func (rb *Bitmap) runOrRun(c1, c2 *container) {
 	size := uint32(0)
 
 	for i < len(a) && j < len(b) {
-		s1, e1 := a[i], a[i+1]
-		s2, e2 := b[j], b[j+1]
+		s1, e1 := uint32(a[i]), uint32(a[i+1])
+		s2, e2 := uint32(b[j]), uint32(b[j+1])
 
 		// Find union of overlapping runs
 		us, ue := s1, e1
@@ -282,47 +274,47 @@ func (rb *Bitmap) runOrRun(c1, c2 *container) {
 			}
 
 			// Keep merging adjacent/overlapping runs
-			for i < len(a) && a[i] <= ue+1 {
-				if a[i+1] > ue {
-					ue = a[i+1]
+			for i < len(a) && uint32(a[i]) <= ue+1 {
+				if uint32(a[i+1]) > ue {
+					ue = uint32(a[i+1])
 				}
 				i += 2
 			}
-			for j < len(b) && b[j] <= ue+1 {
-				if b[j+1] > ue {
-					ue = b[j+1]
+			for j < len(b) && uint32(b[j]) <= ue+1 {
+				if uint32(b[j+1]) > ue {
+					ue = uint32(b[j+1])
 				}
 				j += 2
 			}
 
-			out = append(out, us, ue)
-			size += uint32(ue) - uint32(us) + 1
+			out = append(out, uint16(us), uint16(ue))
+			size += ue - us + 1
 		} else if s1 < s2 {
 			// Non-overlapping, take first run
-			out = append(out, s1, e1)
-			size += uint32(e1) - uint32(s1) + 1
+			out = append(out, uint16(s1), uint16(e1))
+			size += e1 - s1 + 1
 			i += 2
 		} else {
 			// Non-overlapping, take second run
-			out = append(out, s2, e2)
-			size += uint32(e2) - uint32(s2) + 1
+			out = append(out, uint16(s2), uint16(e2))
+			size += e2 - s2 + 1
 			j += 2
 		}
 	}
 
 	// Add remaining runs from first container
 	for i < len(a) {
-		s, e := a[i], a[i+1]
-		out = append(out, s, e)
-		size += uint32(e) - uint32(s) + 1
+		s, e := uint32(a[i]), uint32(a[i+1])
+		out = append(out, uint16(s), uint16(e))
+		size += e - s + 1
 		i += 2
 	}
 
 	// Add remaining runs from second container
 	for j < len(b) {
-		s, e := b[j], b[j+1]
-		out = append(out, s, e)
-		size += uint32(e) - uint32(s) + 1
+		s, e := uint32(b[j]), uint32(b[j+1])
+		out = append(out, uint16(s), uint16(e))
+		size += e - s + 1
 		j += 2
 	}
 

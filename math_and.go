@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 // and performs AND with a single bitmap efficiently
@@ -217,8 +220,8 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 	size := uint32(0)
 
 	for i < len(a) && j < len(b) {
-		s1, e1 := a[i], a[i+1]
-		s2, e2 := b[j], b[j+1]
+		s1, e1 := uint32(a[i]), uint32(a[i+1])
+		s2, e2 := uint32(b[j]), uint32(b[j+1])
 
 		is, ie := s1, e1
 		if s2 > is {
@@ -229,8 +232,8 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 		}
 
 		if is <= ie {
-			out = append(out, is, ie)
-			size += uint32(ie) - uint32(is) + 1
+			out = append(out, uint16(is), uint16(ie))
+			size += ie - is + 1
 		}
 
 		switch {
@@ -246,35 +249,11 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 
 	c1.Data = append(c1.Data[:0], out...)
 	c1.Size = size
-	rb.scratch = out
 	return size > 0
 }
 
 // runAndBmp performs AND between run and bitmap containers
 func (rb *Bitmap) runAndBmp(c1, c2 *container) bool {
-	runs, bmp := c1.Data, c2.bmp()
-	out := rb.scratch[:0]
-	size := uint32(0)
-
-	for i := 0; i < len(runs); i += 2 {
-		for val, end := runs[i], runs[i+1]; val <= end; {
-			if !bmp.Contains(uint32(val)) {
-				val++
-				continue
-			}
-
-			start := val
-			val++
-			for val <= end && bmp.Contains(uint32(val)) {
-				val++
-			}
-			out = append(out, start, val-1)
-			size += uint32(val-1) - uint32(start) + 1
-		}
-	}
-
-	c1.Data = append(c1.Data[:0], out...)
-	c1.Size = size
-	rb.scratch = out
-	return size > 0
+	c1.runToBmp()
+	return rb.bmpAndBmp(c1, c2)
 }

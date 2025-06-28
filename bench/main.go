@@ -133,7 +133,7 @@ func runRange(b *bench.B) {
 			name := fmt.Sprintf("range %s (%s) ", formatSize(size), shape.name)
 
 			b.Run(name,
-				func(b *bench.B) { our.Range(func(uint32) {}) },
+				func(b *bench.B) { our.Range(func(uint32) bool { return true }) },
 				func(b *bench.B) { ref.Iterate(func(uint32) bool { return true }) })
 		}
 	}

@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 // Range calls the given function for each value in the bitmap
@@ -29,10 +32,6 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 				for curr := start; curr <= end; curr++ {
 					if !fn(base | curr) {
 						return
-					}
-
-					if curr == end {
-						break // Prevent overflow
 					}
 				}
 			}
@@ -77,9 +76,6 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 					value := base | curr
 					if !f(value) {
 						toRemove = append(toRemove, value)
-					}
-					if curr == end {
-						break // Prevent overflow
 					}
 				}
 			}

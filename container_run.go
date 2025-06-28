@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
@@ -79,19 +82,18 @@ func (c *container) runDel(value uint16) bool {
 	}
 
 	idx := search[0]
-	start := c.Data[idx*2]
-	end := c.Data[idx*2+1]
-
+	r0 := c.Data[idx*2]
+	r1 := c.Data[idx*2+1]
 	switch {
-	case start == end:
+	case r0 == r1:
 		c.runRemoveRunAt(idx)
-	case value == start:
+	case value == r0:
 		c.Data[idx*2] = value + 1
-	case value == end:
+	case value == r1:
 		c.Data[idx*2+1] = value - 1
 	default:
 		c.Data[idx*2+1] = value - 1
-		c.runInsertRunAt(idx+1, value+1, end)
+		c.runInsertRunAt(idx+1, value+1, r1)
 	}
 
 	c.Size--
@@ -185,34 +187,76 @@ func (c *container) runToArray() {
 	// Copy all values to the array
 	idx := 0
 	for i := 0; i < numRuns; i++ {
-		start, end := srcData[i*2], srcData[i*2+1]
-		for value := start; value <= end; value++ {
-			dst[idx] = value
+		r0, r1 := uint32(srcData[i*2]), uint32(srcData[i*2+1])
+		for value := r0; value <= r1; value++ {
+			dst[idx] = uint16(value)
 			idx++
-			if value == end {
-				break // Prevent uint16 overflow when end is 65535
-			}
 		}
 	}
 }
 
 // runToBmp converts this container from run to bitmap
 func (c *container) runToBmp() {
-	numRuns := len(c.Data) / 2
-	srcData := c.Data
+	dst := borrowBitmap()
 
-	// Create bitmap data (65536 bits = 8192 bytes = 4096 uint16s)
-	c.Data = make([]uint16, 4096)
-	c.Type = typeBitmap
-	dst := c.bmp()
-
-	for i := 0; i < numRuns; i++ {
-		start, end := srcData[i*2], srcData[i*2+1]
-		for v := start; v <= end; v++ {
-			dst.Set(uint32(v))
-			if v == end {
-				break // Prevent uint16 overflow when end is 65535
-			}
+	// Convert runs to bitmap
+	n, src := len(c.Data)/2, c.Data
+	for i := 0; i < n; i++ {
+		r0, r1 := uint32(src[i*2]), uint32(src[i*2+1])
+		for v := r0; v <= r1; v++ {
+			dst.Set(v)
 		}
 	}
+
+	// Release the original data
+	release(c.Data)
+
+	// Swap scratch with bitmap
+	c.Data = asUint16s(dst)
+	c.Type = typeBitmap
+	c.Size = uint32(dst.Count())
+}
+
+// runMin returns the smallest value in a run container
+func (c *container) runMin() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[0], true // First run's start
+}
+
+// runMax returns the largest value in a run container
+func (c *container) runMax() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[len(c.Data)-1], true // Last run's end
+}
+
+// runMinZero returns the smallest unset value in a run container
+func (c *container) runMinZero() (uint16, bool) {
+	switch {
+	case len(c.Data) == 0:
+		return 0, true
+	case c.Data[0] > 0:
+		return 0, true
+	}
+
+	// Find first gap between runs
+	n := len(c.Data) / 2
+	for i := 0; i < n-1; i++ {
+		r0 := c.Data[i*2+1]
+		r1 := c.Data[(i+1)*2]
+		if r1 > r0+1 {
+			return r0 + 1, true
+		}
+	}
+
+	// Check if there's a gap after the last run
+	lastEnd := c.Data[(n-1)*2+1]
+	if lastEnd < 65535 {
+		return lastEnd + 1, true
+	}
+
+	return 0, false
 }

@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 const (
@@ -109,4 +112,43 @@ func (c *container) tryOptimize() {
 	if c.Call++; c.Call%optimizeEvery == 0 {
 		c.optimize()
 	}
+}
+
+// min returns the smallest value in the container
+func (c *container) min() (uint16, bool) {
+	switch c.Type {
+	case typeArray:
+		return c.arrMin()
+	case typeBitmap:
+		return c.bmpMin()
+	case typeRun:
+		return c.runMin()
+	}
+	return 0, false
+}
+
+// max returns the largest value in the container
+func (c *container) max() (uint16, bool) {
+	switch c.Type {
+	case typeArray:
+		return c.arrMax()
+	case typeBitmap:
+		return c.bmpMax()
+	case typeRun:
+		return c.runMax()
+	}
+	return 0, false
+}
+
+// minZero returns the smallest unset value in the container (0-65535 range)
+func (c *container) minZero() (uint16, bool) {
+	switch c.Type {
+	case typeArray:
+		return c.arrMinZero()
+	case typeBitmap:
+		return c.bmpMinZero()
+	case typeRun:
+		return c.runMinZero()
+	}
+	return 0, false
 }

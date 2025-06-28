@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 // Bitmap represents a roaring bitmap for uint32 values
@@ -136,6 +139,65 @@ func (rb *Bitmap) Xor(other *Bitmap, extra ...*Bitmap) {
 			rb.xor(bm)
 		}
 	}
+}
+
+// Min get the smallest value stored in this bitmap, assuming the bitmap is not empty.
+func (rb *Bitmap) Min() (uint32, bool) {
+	for i := 0; i < len(rb.containers); i++ {
+		if min, ok := rb.containers[i].min(); ok {
+			return uint32(rb.index[i])<<16 | uint32(min), true
+		}
+	}
+	return 0, false
+}
+
+// Max get the largest value stored in this bitmap, assuming the bitmap is not empty.
+func (rb *Bitmap) Max() (uint32, bool) {
+	for i := len(rb.containers) - 1; i >= 0; i-- {
+		if max, ok := rb.containers[i].max(); ok {
+			return uint32(rb.index[i])<<16 | uint32(max), true
+		}
+	}
+	return 0, false
+}
+
+// MinZero finds the first zero bit and returns its index, assuming the bitmap is not empty.
+func (rb *Bitmap) MinZero() (uint32, bool) {
+	// Check if position 0 is unset (before first container or within first container)
+	if len(rb.containers) == 0 || rb.index[0] > 0 {
+		return 0, true
+	}
+
+	// Check within first container
+	if minZero, ok := rb.containers[0].minZero(); ok {
+		return uint32(rb.index[0])<<16 | uint32(minZero), true
+	}
+
+	// Check gaps between containers
+	for i := 0; i < len(rb.containers)-1; i++ {
+		currentHi := rb.index[i]
+		nextHi := rb.index[i+1]
+
+		// If there's a gap between containers
+		if nextHi > currentHi+1 {
+			return uint32(currentHi+1) << 16, true
+		}
+
+		// Check within the next container
+		if minZero, ok := rb.containers[i+1].minZero(); ok {
+			return uint32(nextHi)<<16 | uint32(minZero), true
+		}
+	}
+
+	// Check after last container
+	if len(rb.containers) > 0 {
+		lastHi := rb.index[len(rb.containers)-1]
+		if lastHi < 65535 {
+			return uint32(lastHi+1) << 16, true
+		}
+	}
+
+	return 0, false // No zero bits found
 }
 
 // ---------------------------------------- Container ----------------------------------------

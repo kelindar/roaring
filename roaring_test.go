@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 import (
@@ -410,4 +413,110 @@ func TestClone(t *testing.T) {
 			assert.True(t, clone.Contains(uint32(i)))
 		}
 	})
+}
+
+func TestMinMax(t *testing.T) {
+	type testCase struct {
+		name string
+		cnr  *container
+		val  uint32
+		has  bool
+	}
+
+	t.Run("min", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, false},
+			{"arr single", newArr(42), 42, true},
+			{"arr multiple", newArr(10, 20, 30), 10, true},
+			{"arr boundary", newArr(0, 65535), 0, true},
+			{"bmp empty", newBmp(), 0, false},
+			{"bmp single", newBmp(42), 42, true},
+			{"bmp multiple", newBmp(10, 20, 30), 10, true},
+			{"bmp boundary", newBmp(0, 65535), 0, true},
+			{"run empty", newRun(), 0, false},
+			{"run single", newRun(42), 42, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 10, true},
+			{"run boundary", newRun(0, 65535), 0, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				min, minOk := rb.Min()
+				assert.Equal(t, tc.has, minOk, "min() ok result")
+				assert.Equal(t, tc.val, min, "min() value")
+			})
+		}
+	})
+
+	t.Run("max", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, false},
+			{"arr single", newArr(42), 42, true},
+			{"arr multiple", newArr(10, 20, 30), 30, true},
+			{"arr boundary", newArr(0, 65535), 65535, true},
+			{"bmp empty", newBmp(), 0, false},
+			{"bmp single", newBmp(42), 42, true},
+			{"bmp multiple", newBmp(10, 20, 30), 30, true},
+			{"bmp boundary", newBmp(0, 65535), 65535, true},
+			{"run empty", newRun(), 0, false},
+			{"run single", newRun(42), 42, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 22, true},
+			{"run boundary", newRun(0, 65535), 65535, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				max, maxOk := rb.Max()
+				assert.Equal(t, tc.has, maxOk, "max() ok result")
+				assert.Equal(t, tc.val, max, "max() value")
+			})
+		}
+	})
+
+	t.Run("minZero", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, true},
+			{"arr single", newArr(42), 0, true},
+			{"arr multiple", newArr(10, 20, 30), 0, true},
+			{"arr boundary", newArr(0, 65535), 1, true},
+			{"bmp empty", newBmp(), 0, true},
+			{"bmp single", newBmp(42), 0, true},
+			{"bmp multiple", newBmp(10, 20, 30), 0, true},
+			{"bmp boundary", newBmp(0, 65535), 1, true},
+			{"run empty", newRun(), 0, true},
+			{"run single", newRun(42), 0, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 0, true},
+			{"run boundary", newRun(0, 1, 65535), 2, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				minZero, minZeroOk := rb.MinZero()
+				assert.Equal(t, tc.has, minZeroOk, "minZero() ok result")
+				assert.Equal(t, tc.val, minZero, "minZero() value")
+			})
+		}
+	})
+
+	/*t.Run("maxZero", func(t *testing.T) {
+		for _, tc := range []testCase{
+			{"arr empty", newArr(), 0, true},
+			{"arr single", newArr(42), 41, true},
+			{"arr multiple", newArr(10, 20, 30), 29, true},
+			{"arr boundary", newArr(0, 65535), 65534, true},
+			{"bmp empty", newBmp(), 0, true},
+			{"bmp single", newBmp(42), 41, true},
+			{"bmp multiple", newBmp(10, 20, 30), 29, true},
+			{"bmp boundary", newBmp(0, 65535), 65534, true},
+			{"run empty", newRun(), 0, true},
+			{"run single", newRun(42), 41, true},
+			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 13, true},
+			{"run boundary", newRun(0, 1, 65535), 65534, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rb, _ := bitmapWith(tc.cnr)
+				maxZero, maxZeroOk := rb.MaxZero()
+				assert.Equal(t, tc.has, maxZeroOk, "maxZero() ok result")
+				assert.Equal(t, tc.val, maxZero, "maxZero() value")
+			})
+		}
+	})*/
+
 }

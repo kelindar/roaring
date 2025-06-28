@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 // arrSet sets a value in an array container
@@ -135,4 +138,44 @@ func (c *container) arrToBmp() {
 	for _, value := range src {
 		dst.Set(uint32(value))
 	}
+}
+
+// arrMin returns the smallest value in an array container
+func (c *container) arrMin() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[0], true
+}
+
+// arrMax returns the largest value in an array container
+func (c *container) arrMax() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[len(c.Data)-1], true
+}
+
+// arrMinZero returns the smallest unset value in an array container
+func (c *container) arrMinZero() (uint16, bool) {
+	switch {
+	case len(c.Data) == 0:
+		return 0, true
+	case c.Data[0] != 0:
+		return 0, true
+	}
+
+	// Find first gap in the sorted array
+	for i := 0; i < len(c.Data)-1; i++ {
+		if c.Data[i+1] != c.Data[i]+1 {
+			return c.Data[i] + 1, true
+		}
+	}
+
+	// No gaps found, check if we can increment the last element
+	if last := c.Data[len(c.Data)-1]; last < 0xFFFF {
+		return last + 1, true
+	}
+
+	return 0, false
 }

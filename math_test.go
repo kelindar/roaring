@@ -1,6 +1,10 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -392,7 +396,9 @@ func TestXor(t *testing.T) {
 			a.Xor(b)
 
 			// Assert the result is correct
-			assert.Equal(t, tt.result, valuesOf(a))
+			values := valuesOf(a)
+			sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+			assert.Equal(t, tt.result, values)
 			assert.Equal(t, bv, valuesOf(b))
 		})
 	}
