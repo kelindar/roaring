@@ -8,7 +8,10 @@ import (
 	"encoding/binary"
 	"io"
 	"math/bits"
+	"unsafe"
 )
+
+var isLittleEndian = binary.LittleEndian.Uint16([]byte{1, 0}) == 1
 
 // ToBytes converts the bitmap to a byte slice
 func (rb *Bitmap) ToBytes() []byte {
@@ -70,7 +73,7 @@ func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 		n += 4
 
 		// Write payload ([]uint16)
-		if err := binary.Write(w, binary.LittleEndian, payload); err != nil {
+		if err := writeUint16s(w, isLittleEndian, payload); err != nil {
 			return n, err
 		}
 		n += int64(sizeBytes)
@@ -109,9 +112,8 @@ func (rb *Bitmap) ReadFrom(r io.Reader) (int64, error) {
 		}
 		n += 4
 
-		count := sizeBytes / 2
-		payload := make([]uint16, count)
-		if err := binary.Read(r, binary.LittleEndian, payload); err != nil {
+		payload, err := readUint16s(r, isLittleEndian, int(sizeBytes))
+		if err != nil {
 			return n, err
 		}
 		n += int64(sizeBytes)
@@ -170,4 +172,33 @@ func ReadFrom(r io.Reader) (*Bitmap, error) {
 		return nil, err
 	}
 	return rb, nil
+}
+
+// writeUint16s writes a slice of uint16s to a writer, converting it to []byte if
+// the machine is little endian.
+func writeUint16s(w io.Writer, isLittleEndian bool, data []uint16) error {
+	switch isLittleEndian {
+	case true:
+		buf := unsafe.Slice((*byte)(unsafe.Pointer(&data[0])), len(data)*2)
+		_, err := w.Write(buf)
+		return err
+	default:
+		return binary.Write(w, binary.LittleEndian, data)
+	}
+}
+
+// readUint16s reads a slice of uint16s from a reader, converting it to []uint16 if
+// the machine is little endian.
+func readUint16s(r io.Reader, isLittleEndian bool, sizeBytes int) ([]uint16, error) {
+	count := sizeBytes / 2
+	switch isLittleEndian {
+	case true:
+		out := make([]byte, sizeBytes)
+		_, err := r.Read(out)
+		return unsafe.Slice((*uint16)(unsafe.Pointer(&out[0])), count), err
+	default:
+		out := make([]uint16, count)
+		err := binary.Read(r, binary.LittleEndian, out)
+		return out, err
+	}
 }

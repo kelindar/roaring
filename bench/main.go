@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -19,9 +20,10 @@ func main() {
 		runOps(runner)
 		runMath(runner)
 		runRange(runner)
+		runCodec(runner)
 	}, bench.WithReference(),
 		bench.WithDuration(10*time.Millisecond),
-		bench.WithSamples(100),
+		bench.WithSamples(200),
 	)
 }
 
@@ -185,4 +187,37 @@ func randomBitmaps(data []uint32) (*rb.Bitmap, *roaring.Bitmap) {
 		}
 	}
 	return our, ref
+}
+
+// Benchmark codec (WriteTo + ReadFrom) for 100K bitmaps with different shapes
+func runCodec(b *bench.B) {
+	const size = 100_000
+	shapes := []struct {
+		name string
+		gen  func(size int) []uint32
+	}{
+		{"seq", dataSeq},
+		{"rnd", dataRand},
+		{"sps", dataSparse},
+		{"dns", dataDense},
+	}
+
+	for _, shape := range shapes {
+		data := shape.gen(size)
+		bm := rb.New()
+		for _, v := range data {
+			bm.Set(v)
+		}
+
+		b.Run("write "+shape.name, func(b *bench.B, _ int) {
+			var buf bytes.Buffer
+			_, _ = bm.WriteTo(&buf)
+		})
+
+		encoded := bm.ToBytes()
+		b.Run("read "+shape.name, func(b *bench.B, _ int) {
+			bm2 := rb.New()
+			_, _ = bm2.ReadFrom(bytes.NewReader(encoded))
+		})
+	}
 }
