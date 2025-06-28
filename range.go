@@ -1,7 +1,7 @@
 package roaring
 
 // Range calls the given function for each value in the bitmap
-func (rb *Bitmap) Range(fn func(x uint32)) {
+func (rb *Bitmap) Range(fn func(x uint32) bool) {
 	for i := range rb.containers {
 		c := &rb.containers[i]
 		base := uint32(rb.index[i]) << 16
@@ -10,12 +10,14 @@ func (rb *Bitmap) Range(fn func(x uint32)) {
 		case typeArray:
 			data := c.Data
 			for j := 0; j < len(data); j++ {
-				fn(base | uint32(data[j]))
+				if !fn(base | uint32(data[j])) {
+					return
+				}
 			}
 
 		case typeBitmap:
-			c.bmp().Range(func(value uint32) {
-				fn(base | value)
+			c.bmpRange(func(value uint32) bool {
+				return fn(base | value)
 			})
 
 		case typeRun:
@@ -23,7 +25,10 @@ func (rb *Bitmap) Range(fn func(x uint32)) {
 			for i := 0; i < numRuns; i++ {
 				start, end := uint32(c.Data[i*2]), uint32(c.Data[i*2+1])
 				for curr := start; curr <= end; curr++ {
-					fn(base | curr)
+					if !fn(base | curr) {
+						return
+					}
+
 					if curr == end {
 						break // Prevent overflow
 					}
@@ -82,5 +87,136 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 	// Remove all values that failed the predicate
 	for _, x := range toRemove {
 		rb.Remove(x)
+	}
+}
+
+// Iterate iterates over all of the bits set to one in this bitmap.
+func (c *container) bmpRange(fn func(x uint32) bool) {
+	dst := c.bmp()
+	for blkAt := 0; blkAt < len(dst); blkAt++ {
+		blk := dst[blkAt]
+		if blk == 0x0 {
+			continue // Skip the empty page
+		}
+
+		// Iterate in a 4-bit chunks so we can reduce the number of function calls and skip
+		// the bits for which we should not call our range function.
+		offset := uint32(blkAt << 6)
+		for ; blk > 0; blk = blk >> 4 {
+			switch blk & 0b1111 {
+			case 0b0001:
+				if !fn(offset + 0) {
+					return
+				}
+			case 0b0010:
+				if !fn(offset + 1) {
+					return
+				}
+			case 0b0011:
+				if !fn(offset + 0) {
+					return
+				}
+				if !fn(offset + 1) {
+					return
+				}
+			case 0b0100:
+				if !fn(offset + 2) {
+					return
+				}
+			case 0b0101:
+				if !fn(offset + 0) {
+					return
+				}
+				if !fn(offset + 2) {
+					return
+				}
+			case 0b0110:
+				if !fn(offset + 1) {
+					return
+				}
+				if !fn(offset + 2) {
+					return
+				}
+			case 0b0111:
+				if !fn(offset + 0) {
+					return
+				}
+				if !fn(offset + 1) {
+					return
+				}
+				if !fn(offset + 2) {
+					return
+				}
+			case 0b1000:
+				if !fn(offset + 3) {
+					return
+				}
+			case 0b1001:
+				if !fn(offset + 0) {
+					return
+				}
+				if !fn(offset + 3) {
+					return
+				}
+			case 0b1010:
+				if !fn(offset + 1) {
+					return
+				}
+				if !fn(offset + 3) {
+					return
+				}
+			case 0b1011:
+				if !fn(offset + 0) {
+					return
+				}
+				if !fn(offset + 1) {
+					return
+				}
+				if !fn(offset + 3) {
+					return
+				}
+			case 0b1100:
+				if !fn(offset + 2) {
+					return
+				}
+				if !fn(offset + 3) {
+					return
+				}
+			case 0b1101:
+				if !fn(offset + 0) {
+					return
+				}
+				if !fn(offset + 2) {
+					return
+				}
+				if !fn(offset + 3) {
+					return
+				}
+			case 0b1110:
+				if !fn(offset + 1) {
+					return
+				}
+				if !fn(offset + 2) {
+					return
+				}
+				if !fn(offset + 3) {
+					return
+				}
+			case 0b1111:
+				if !fn(offset + 0) {
+					return
+				}
+				if !fn(offset + 1) {
+					return
+				}
+				if !fn(offset + 2) {
+					return
+				}
+				if !fn(offset + 3) {
+					return
+				}
+			}
+			offset += 4
+		}
 	}
 }

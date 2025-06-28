@@ -14,8 +14,9 @@ func bitmapWith(c *container) (*Bitmap, []uint16) {
 
 func valuesOf(v *Bitmap) []uint16 {
 	out := []uint16{}
-	v.Range(func(x uint32) {
+	v.Range(func(x uint32) bool {
 		out = append(out, uint16(x))
+		return true
 	})
 	return out
 }

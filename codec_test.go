@@ -31,8 +31,8 @@ func bitmapsEqual(t *testing.T, a, b *Bitmap) {
 	t.Helper()
 	assert.Equal(t, a.Count(), b.Count(), "Count mismatch")
 	var av, bv []uint32
-	a.Range(func(x uint32) { av = append(av, x) })
-	b.Range(func(x uint32) { bv = append(bv, x) })
+	a.Range(func(x uint32) bool { av = append(av, x); return true })
+	b.Range(func(x uint32) bool { bv = append(bv, x); return true })
 	assert.Equal(t, av, bv, "Values mismatch")
 }
 
