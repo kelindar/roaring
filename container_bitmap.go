@@ -4,18 +4,12 @@
 package roaring
 
 import (
-	"unsafe"
-
 	"github.com/kelindar/bitmap"
 )
 
 // bmp converts the container to a bmp.Bitmap
 func (c *container) bmp() bitmap.Bitmap {
-	if len(c.Data) == 0 {
-		return nil
-	}
-
-	return bitmap.Bitmap(unsafe.Slice((*uint64)(unsafe.Pointer(&c.Data[0])), len(c.Data)/4))
+	return asBitmap(c.Data)
 }
 
 // bmpSet sets a value in a bitmap container

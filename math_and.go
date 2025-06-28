@@ -220,8 +220,8 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 	size := uint32(0)
 
 	for i < len(a) && j < len(b) {
-		s1, e1 := a[i], a[i+1]
-		s2, e2 := b[j], b[j+1]
+		s1, e1 := uint32(a[i]), uint32(a[i+1])
+		s2, e2 := uint32(b[j]), uint32(b[j+1])
 
 		is, ie := s1, e1
 		if s2 > is {
@@ -232,8 +232,8 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 		}
 
 		if is <= ie {
-			out = append(out, is, ie)
-			size += uint32(ie) - uint32(is) + 1
+			out = append(out, uint16(is), uint16(ie))
+			size += ie - is + 1
 		}
 
 		switch {
@@ -255,29 +255,13 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 
 // runAndBmp performs AND between run and bitmap containers
 func (rb *Bitmap) runAndBmp(c1, c2 *container) bool {
-	runs, bmp := c1.Data, c2.bmp()
-	out := rb.scratch[:0]
-	size := uint32(0)
-
-	for i := 0; i < len(runs); i += 2 {
-		for val, end := runs[i], runs[i+1]; val <= end; {
-			if !bmp.Contains(uint32(val)) {
-				val++
-				continue
-			}
-
-			start := val
-			val++
-			for val <= end && bmp.Contains(uint32(val)) {
-				val++
-			}
-			out = append(out, start, val-1)
-			size += uint32(val-1) - uint32(start) + 1
-		}
+	a, b := c1.bmp(), c2.bmp()
+	if a == nil || b == nil {
+		return false
 	}
 
-	c1.Data = append(c1.Data[:0], out...)
-	c1.Size = size
-	rb.scratch = out
-	return size > 0
+	a.And(b)
+
+	c1.Size = uint32(a.Count())
+	return c1.Size > 0
 }

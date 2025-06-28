@@ -164,7 +164,7 @@ func (rb *Bitmap) arrXorRun(c1, c2 *container) bool {
 		// Check if value is in any run
 		inRun := false
 		for i := 0; i < len(runs); i += 2 {
-			if val >= runs[i] && val <= runs[i+1] {
+			if uint32(val) >= uint32(runs[i]) && uint32(val) <= uint32(runs[i+1]) {
 				inRun = true
 				break
 			}
@@ -176,15 +176,12 @@ func (rb *Bitmap) arrXorRun(c1, c2 *container) bool {
 
 	// Add values from runs that are not in array
 	for i := 0; i < len(runs); i += 2 {
-		start, end := runs[i], runs[i+1]
+		start, end := uint32(runs[i]), uint32(runs[i+1])
 		for v := start; v <= end; v++ {
 			// Check if value is in array
-			_, found := find16(c1.Data, v)
+			_, found := find16(c1.Data, uint16(v))
 			if !found {
-				out = append(out, v)
-			}
-			if v == end {
-				break // Prevent overflow
+				out = append(out, uint16(v))
 			}
 		}
 	}
@@ -229,17 +226,14 @@ func (rb *Bitmap) bmpXorRun(c1, c2 *container) bool {
 	runs := c2.Data
 
 	for i := 0; i < len(runs); i += 2 {
-		start, end := runs[i], runs[i+1]
+		start, end := uint32(runs[i]), uint32(runs[i+1])
 		for v := start; v <= end; v++ {
-			if bmp.Contains(uint32(v)) {
-				bmp.Remove(uint32(v))
+			if bmp.Contains(v) {
+				bmp.Remove(v)
 				c1.Size--
 			} else {
-				bmp.Set(uint32(v))
+				bmp.Set(v)
 				c1.Size++
-			}
-			if v == end {
-				break // Prevent overflow
 			}
 		}
 	}
@@ -271,12 +265,9 @@ func (rb *Bitmap) runXorRun(c1, c2 *container) bool {
 	runs := c2.Data
 	var tempArray []uint16
 	for i := 0; i < len(runs); i += 2 {
-		start, end := runs[i], runs[i+1]
+		start, end := uint32(runs[i]), uint32(runs[i+1])
 		for v := start; v <= end; v++ {
-			tempArray = append(tempArray, v)
-			if v == end {
-				break // Prevent overflow
-			}
+			tempArray = append(tempArray, uint16(v))
 		}
 	}
 

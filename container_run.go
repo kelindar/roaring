@@ -187,36 +187,34 @@ func (c *container) runToArray() {
 	// Copy all values to the array
 	idx := 0
 	for i := 0; i < numRuns; i++ {
-		r0, r1 := srcData[i*2], srcData[i*2+1]
+		r0, r1 := uint32(srcData[i*2]), uint32(srcData[i*2+1])
 		for value := r0; value <= r1; value++ {
-			dst[idx] = value
+			dst[idx] = uint16(value)
 			idx++
-			if value == r1 {
-				break // Prevent uint16 overflow when end is 65535
-			}
 		}
 	}
 }
 
 // runToBmp converts this container from run to bitmap
 func (c *container) runToBmp() {
-	numRuns := len(c.Data) / 2
-	srcData := c.Data
+	dst := borrowBitmap()
 
-	// Create bitmap data (65536 bits = 8192 bytes = 4096 uint16s)
-	c.Data = make([]uint16, 4096)
-	c.Type = typeBitmap
-	dst := c.bmp()
-
-	for i := 0; i < numRuns; i++ {
-		r0, r1 := srcData[i*2], srcData[i*2+1]
+	// Convert runs to bitmap
+	n, src := len(c.Data)/2, c.Data
+	for i := 0; i < n; i++ {
+		r0, r1 := uint32(src[i*2]), uint32(src[i*2+1])
 		for v := r0; v <= r1; v++ {
-			dst.Set(uint32(v))
-			if v == r1 {
-				break // Prevent uint16 overflow when end is 65535
-			}
+			dst.Set(v)
 		}
 	}
+
+	// Release the original data
+	release(c.Data)
+
+	// Swap scratch with bitmap
+	c.Data = asUint16s(dst)
+	c.Type = typeBitmap
+	c.Size = uint32(dst.Count())
 }
 
 // runMin returns the smallest value in a run container

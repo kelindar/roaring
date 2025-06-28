@@ -172,14 +172,11 @@ func (rb *Bitmap) bmpAndNotRun(c1, c2 *container) bool {
 	runs := c2.Data
 
 	for i := 0; i < len(runs); i += 2 {
-		start, end := runs[i], runs[i+1]
+		start, end := uint32(runs[i]), uint32(runs[i+1])
 		for v := start; v <= end; v++ {
-			if bmp.Contains(uint32(v)) {
-				bmp.Remove(uint32(v))
+			if bmp.Contains(v) {
+				bmp.Remove(v)
 				c1.Size--
-			}
-			if v == end {
-				break // Prevent overflow
 			}
 		}
 	}
@@ -193,27 +190,28 @@ func (rb *Bitmap) runAndNotArr(c1, c2 *container) bool {
 	size := uint32(0)
 
 	for i := 0; i < len(runs); i += 2 {
-		start, end := runs[i], runs[i+1]
+		start, end := uint32(runs[i]), uint32(runs[i+1])
 
 		// For each run, exclude elements that are in the array
 		currStart := start
 		for _, val := range arr {
-			if val < currStart || val > end {
+			val32 := uint32(val)
+			if val32 < currStart || val32 > end {
 				continue // Value not in current run
 			}
 
 			// Add run segment before this value
-			if currStart < val {
-				out = append(out, currStart, val-1)
-				size += uint32(val-1) - uint32(currStart) + 1
+			if currStart < val32 {
+				out = append(out, uint16(currStart), uint16(val32-1))
+				size += (val32 - 1) - currStart + 1
 			}
-			currStart = val + 1
+			currStart = val32 + 1
 		}
 
 		// Add remaining part of run
 		if currStart <= end {
-			out = append(out, currStart, end)
-			size += uint32(end) - uint32(currStart) + 1
+			out = append(out, uint16(currStart), uint16(end))
+			size += end - currStart + 1
 		}
 	}
 
@@ -230,27 +228,24 @@ func (rb *Bitmap) runAndNotBmp(c1, c2 *container) bool {
 	size := uint32(0)
 
 	for i := 0; i < len(runs); i += 2 {
-		start, end := runs[i], runs[i+1]
+		start, end := uint32(runs[i]), uint32(runs[i+1])
 		currStart := start
 
 		for v := start; v <= end; v++ {
-			if bmp.Contains(uint32(v)) {
+			if bmp.Contains(v) {
 				// Found element to exclude - add run before it
 				if currStart < v {
-					out = append(out, currStart, v-1)
-					size += uint32(v-1) - uint32(currStart) + 1
+					out = append(out, uint16(currStart), uint16(v-1))
+					size += (v - 1) - currStart + 1
 				}
 				currStart = v + 1
-			}
-			if v == end {
-				break // Prevent overflow
 			}
 		}
 
 		// Add remaining part of run
 		if currStart <= end {
-			out = append(out, currStart, end)
-			size += uint32(end) - uint32(currStart) + 1
+			out = append(out, uint16(currStart), uint16(end))
+			size += end - currStart + 1
 		}
 	}
 
@@ -268,19 +263,19 @@ func (rb *Bitmap) runAndNotRun(c1, c2 *container) bool {
 	i, j := 0, 0
 
 	for i < len(a) {
-		s1, e1 := a[i], a[i+1]
+		s1, e1 := uint32(a[i]), uint32(a[i+1])
 
 		// Find overlapping runs in second container
 		currStart := s1
-		for j < len(b) && b[j] <= e1 {
-			s2, e2 := b[j], b[j+1]
+		for j < len(b) && uint32(b[j]) <= e1 {
+			s2, e2 := uint32(b[j]), uint32(b[j+1])
 
 			// Check for overlap
 			if s2 <= e1 && e2 >= currStart {
 				// Add segment before overlap
 				if currStart < s2 {
-					out = append(out, currStart, s2-1)
-					size += uint32(s2-1) - uint32(currStart) + 1
+					out = append(out, uint16(currStart), uint16(s2-1))
+					size += (s2 - 1) - currStart + 1
 				}
 
 				// Move past this overlap
@@ -303,8 +298,8 @@ func (rb *Bitmap) runAndNotRun(c1, c2 *container) bool {
 
 		// Add remaining part of first run
 		if currStart <= e1 {
-			out = append(out, currStart, e1)
-			size += uint32(e1) - uint32(currStart) + 1
+			out = append(out, uint16(currStart), uint16(e1))
+			size += e1 - currStart + 1
 		}
 
 		i += 2

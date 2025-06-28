@@ -33,10 +33,6 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 					if !fn(base | curr) {
 						return
 					}
-
-					if curr == end {
-						break // Prevent overflow
-					}
 				}
 			}
 		}
@@ -80,9 +76,6 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 					value := base | curr
 					if !f(value) {
 						toRemove = append(toRemove, value)
-					}
-					if curr == end {
-						break // Prevent overflow
 					}
 				}
 			}
