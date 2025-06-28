@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"math/rand/v2"
 	"time"
@@ -16,15 +15,11 @@ var (
 )
 
 func main() {
-	prefix := flag.String("bench", "", "Run only benchmarks with this prefix (e.g. 'set', 'and', 'range')")
-	flag.Parse()
-
 	bench.Run(func(runner *bench.B) {
 		runOps(runner)
 		runMath(runner)
 		runRange(runner)
 	}, bench.WithReference(),
-		bench.WithFilter(*prefix),
 		bench.WithDuration(10*time.Millisecond),
 		bench.WithSamples(100),
 	)
@@ -59,8 +54,8 @@ func runOps(b *bench.B) {
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
 				b.Run(name,
-					func(b *bench.B) { op.ourFn(our, data[rand.IntN(len(data))]) },
-					func(b *bench.B) { op.refFn(ref, data[rand.IntN(len(data))]) })
+					func(b *bench.B, i int) { op.ourFn(our, data[i%len(data)]) },
+					func(b *bench.B, i int) { op.refFn(ref, data[i%len(data)]) })
 			}
 		}
 	}
@@ -101,11 +96,11 @@ func runMath(b *bench.B) {
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
 				b.Run(name,
-					func(b *bench.B) {
+					func(b *bench.B, _ int) {
 						dst := our.Clone(nil)
 						op.ourFn(dst, ourSrc)
 					},
-					func(b *bench.B) {
+					func(b *bench.B, _ int) {
 						dst := ref.Clone()
 						op.refFn(dst, refSrc)
 					})
@@ -133,8 +128,8 @@ func runRange(b *bench.B) {
 			name := fmt.Sprintf("range %s (%s) ", formatSize(size), shape.name)
 
 			b.Run(name,
-				func(b *bench.B) { our.Range(func(uint32) bool { return true }) },
-				func(b *bench.B) { ref.Iterate(func(uint32) bool { return true }) })
+				func(b *bench.B, op int) { our.Range(func(uint32) bool { return true }) },
+				func(b *bench.B, op int) { ref.Iterate(func(uint32) bool { return true }) })
 		}
 	}
 }
