@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 // arrSet sets a value in an array container
@@ -135,4 +138,74 @@ func (c *container) arrToBmp() {
 	for _, value := range src {
 		dst.Set(uint32(value))
 	}
+}
+
+// arrMin returns the smallest value in an array container
+func (c *container) arrMin() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[0], true
+}
+
+// arrMax returns the largest value in an array container
+func (c *container) arrMax() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[len(c.Data)-1], true
+}
+
+// arrMinZero returns the smallest unset value in an array container
+func (c *container) arrMinZero() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, true // Empty container, 0 is unset
+	}
+
+	// Check if 0 is unset
+	if c.Data[0] != 0 {
+		return 0, true
+	}
+
+	// Find first gap in the sorted array
+	for i := 0; i < len(c.Data)-1; i++ {
+		if c.Data[i+1] != c.Data[i]+1 {
+			return c.Data[i] + 1, true
+		}
+	}
+
+	// No gaps found, check if we can increment the last element
+	last := c.Data[len(c.Data)-1]
+	if last < 65535 {
+		return last + 1, true
+	}
+
+	return 0, false // Array contains all values 0-65535
+}
+
+// arrMaxZero returns the largest unset value in an array container
+func (c *container) arrMaxZero() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 65535, true // Empty container, 65535 is unset
+	}
+
+	// Check if 65535 is unset
+	last := c.Data[len(c.Data)-1]
+	if last != 65535 {
+		return 65535, true
+	}
+
+	// Find last gap in the sorted array (search backwards)
+	for i := len(c.Data) - 1; i > 0; i-- {
+		if c.Data[i] != c.Data[i-1]+1 {
+			return c.Data[i] - 1, true
+		}
+	}
+
+	// No gaps found, check if we can decrement the first element
+	if c.Data[0] > 0 {
+		return c.Data[0] - 1, true
+	}
+
+	return 0, false // Array contains all values 0-65535
 }

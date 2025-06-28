@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
@@ -215,4 +218,84 @@ func (c *container) runToBmp() {
 			}
 		}
 	}
+}
+
+// runMin returns the smallest value in a run container
+func (c *container) runMin() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[0], true // First run's start
+}
+
+// runMax returns the largest value in a run container
+func (c *container) runMax() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, false
+	}
+	return c.Data[len(c.Data)-1], true // Last run's end
+}
+
+// runMinZero returns the smallest unset value in a run container
+func (c *container) runMinZero() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 0, true // Empty container, 0 is unset
+	}
+
+	numRuns := len(c.Data) / 2
+
+	// Check if 0 is unset (before first run)
+	if c.Data[0] > 0 {
+		return 0, true
+	}
+
+	// Find first gap between runs
+	for i := 0; i < numRuns-1; i++ {
+		currentEnd := c.Data[i*2+1]
+		nextStart := c.Data[(i+1)*2]
+
+		if nextStart > currentEnd+1 {
+			return currentEnd + 1, true
+		}
+	}
+
+	// Check if there's a gap after the last run
+	lastEnd := c.Data[(numRuns-1)*2+1]
+	if lastEnd < 65535 {
+		return lastEnd + 1, true
+	}
+
+	return 0, false // No gaps found, all values 0-65535 are covered
+}
+
+// runMaxZero returns the largest unset value in a run container
+func (c *container) runMaxZero() (uint16, bool) {
+	if len(c.Data) == 0 {
+		return 65535, true // Empty container, 65535 is unset
+	}
+
+	numRuns := len(c.Data) / 2
+
+	// Check if 65535 is unset (after last run)
+	lastEnd := c.Data[(numRuns-1)*2+1]
+	if lastEnd < 65535 {
+		return 65535, true
+	}
+
+	// Find last gap between runs (search backwards)
+	for i := numRuns - 1; i > 0; i-- {
+		currentStart := c.Data[i*2]
+		prevEnd := c.Data[(i-1)*2+1]
+
+		if currentStart > prevEnd+1 {
+			return currentStart - 1, true
+		}
+	}
+
+	// Check if there's a gap before the first run
+	if c.Data[0] > 0 {
+		return c.Data[0] - 1, true
+	}
+
+	return 0, false // No gaps found, all values 0-65535 are covered
 }

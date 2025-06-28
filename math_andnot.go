@@ -1,3 +1,6 @@
+// Copyright (c) Roman Atachiants and contributors. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root
+
 package roaring
 
 // andNot performs AND NOT with a single bitmap efficiently
