@@ -484,7 +484,7 @@ func TestMinMax(t *testing.T) {
 			{"run empty", newRun(), 0, true},
 			{"run single", newRun(42), 0, true},
 			{"run multiple", newRun(10, 11, 12, 20, 21, 22), 0, true},
-			{"run boundary", newRun(0, 65535), 1, true},
+			{"run boundary", newRun(0, 1, 65535), 2, true},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				rb, _ := bitmapWith(tc.cnr)
