@@ -23,7 +23,7 @@ func main() {
 		runCodec(runner)
 	}, bench.WithReference(),
 		bench.WithDuration(10*time.Millisecond),
-		bench.WithSamples(200),
+		bench.WithSamples(100),
 	)
 }
 
