@@ -2,3 +2,5 @@
 *.test
 *.exe
 GEMINI.md
+bench.gob
+bench.json

@@ -56,8 +56,8 @@ func runOps(b *bench.B) {
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
 				b.Run(name,
-					func(b *bench.B, i int) { op.ourFn(our, data[i%len(data)]) },
-					func(b *bench.B, i int) { op.refFn(ref, data[i%len(data)]) })
+					func(i int) { op.ourFn(our, data[i%len(data)]) },
+					func(i int) { op.refFn(ref, data[i%len(data)]) })
 			}
 		}
 	}
@@ -98,11 +98,11 @@ func runMath(b *bench.B) {
 
 				name := fmt.Sprintf("%s %s (%s) ", op.name, formatSize(size), shape.name)
 				b.Run(name,
-					func(b *bench.B, _ int) {
+					func(_ int) {
 						dst := our.Clone(nil)
 						op.ourFn(dst, ourSrc)
 					},
-					func(b *bench.B, _ int) {
+					func(_ int) {
 						dst := ref.Clone()
 						op.refFn(dst, refSrc)
 					})
@@ -130,8 +130,12 @@ func runRange(b *bench.B) {
 			name := fmt.Sprintf("range %s (%s) ", formatSize(size), shape.name)
 
 			b.Run(name,
-				func(b *bench.B, op int) { our.Range(func(uint32) bool { return true }) },
-				func(b *bench.B, op int) { ref.Iterate(func(uint32) bool { return true }) })
+				func(op int) {
+					our.Range(func(uint32) bool { return true })
+				},
+				func(op int) {
+					ref.Iterate(func(uint32) bool { return true })
+				})
 		}
 	}
 }
@@ -209,13 +213,13 @@ func runCodec(b *bench.B) {
 			bm.Set(v)
 		}
 
-		b.Run("write "+shape.name, func(b *bench.B, _ int) {
+		b.Run("write "+shape.name, func(_ int) {
 			var buf bytes.Buffer
 			_, _ = bm.WriteTo(&buf)
 		})
 
 		encoded := bm.ToBytes()
-		b.Run("read "+shape.name, func(b *bench.B, _ int) {
+		b.Run("read "+shape.name, func(_ int) {
 			bm2 := rb.New()
 			_, _ = bm2.ReadFrom(bytes.NewReader(encoded))
 		})
