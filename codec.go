@@ -191,13 +191,17 @@ func writeUint16s(w io.Writer, isLittleEndian bool, data []uint16) error {
 // the machine is little endian.
 func readUint16s(r io.Reader, isLittleEndian bool, sizeBytes int) ([]uint16, error) {
 	count := sizeBytes / 2
+	out := make([]uint16, count)
+	if count == 0 {
+		return out, nil
+	}
+
 	switch isLittleEndian {
 	case true:
-		out := make([]byte, sizeBytes)
-		_, err := r.Read(out)
-		return unsafe.Slice((*uint16)(unsafe.Pointer(&out[0])), count), err
+		buf := unsafe.Slice((*byte)(unsafe.Pointer(&out[0])), sizeBytes)
+		_, err := io.ReadFull(r, buf)
+		return out, err
 	default:
-		out := make([]uint16, count)
 		err := binary.Read(r, binary.LittleEndian, out)
 		return out, err
 	}
