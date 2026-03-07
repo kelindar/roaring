@@ -149,7 +149,7 @@ range 1K (dns)       114.5 ns     8.7M         0             🟰 similar
 range 1M (seq)       2.4 ms       413          0             ❌ -37%
 range 1M (rnd)       2.2 ms       461          0             ❌ -41%
 range 1M (sps)       554.2 µs     1.8K         0             ✅ +12%
-range 1M (dns)       218.2 µs     4.6K         0             ✅ +39
+range 1M (dns)       218.2 µs     4.6K         0             ✅ +39%
 ```
 
 
