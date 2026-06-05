@@ -14,7 +14,7 @@ require (
 	github.com/kelindar/simd v1.2.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 )
 

@@ -403,3 +403,18 @@ func TestXor(t *testing.T) {
 		})
 	}
 }
+
+func TestXorArrayRunKeepsSearchableResult(t *testing.T) {
+	a, _ := bitmapWith(newArr(1, 3, 5, 7, 9))
+	b, _ := bitmapWith(newRun(2, 3, 6, 7, 10))
+
+	a.Xor(b)
+
+	assert.Equal(t, []uint16{1, 2, 5, 6, 9, 10}, valuesOf(a))
+	for _, value := range []uint32{1, 2, 5, 6, 9, 10} {
+		assert.True(t, a.Contains(value), "value %d should remain searchable", value)
+	}
+	for _, value := range []uint32{3, 7} {
+		assert.False(t, a.Contains(value), "value %d should be removed", value)
+	}
+}

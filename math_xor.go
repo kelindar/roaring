@@ -157,33 +157,43 @@ func (rb *Bitmap) arrXorBmp(c1, c2 *container) bool {
 
 // arrXorRun performs XOR between array and run containers
 func (rb *Bitmap) arrXorRun(c1, c2 *container) bool {
+	a := c1.Data
 	runs := c2.Data
 	out := rb.scratch[:0]
+	arrAt := 0
 
-	for _, val := range c1.Data {
-		// Check if value is in any run
-		inRun := false
-		for i := 0; i < len(runs); i += 2 {
-			if uint32(val) >= uint32(runs[i]) && uint32(val) <= uint32(runs[i+1]) {
-				inRun = true
+	for i := 0; i < len(runs); i += 2 {
+		start, end := uint32(runs[i]), uint32(runs[i+1])
+
+		for arrAt < len(a) && uint32(a[arrAt]) < start {
+			out = append(out, a[arrAt])
+			arrAt++
+		}
+
+		curr := start
+		for arrAt < len(a) {
+			val := uint32(a[arrAt])
+			if val > end {
 				break
 			}
+
+			for curr < val {
+				out = append(out, uint16(curr))
+				curr++
+			}
+			curr = val + 1
+			arrAt++
 		}
-		if !inRun {
-			out = append(out, val)
+
+		for curr <= end {
+			out = append(out, uint16(curr))
+			curr++
 		}
 	}
 
-	// Add values from runs that are not in array
-	for i := 0; i < len(runs); i += 2 {
-		start, end := uint32(runs[i]), uint32(runs[i+1])
-		for v := start; v <= end; v++ {
-			// Check if value is in array
-			_, found := find16(c1.Data, uint16(v))
-			if !found {
-				out = append(out, uint16(v))
-			}
-		}
+	for arrAt < len(a) {
+		out = append(out, a[arrAt])
+		arrAt++
 	}
 
 	c1.Data = append(c1.Data[:0], out...)

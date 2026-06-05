@@ -122,17 +122,14 @@ func (rb *Bitmap) arrAndNotBmp(c1, c2 *container) bool {
 func (rb *Bitmap) arrAndNotRun(c1, c2 *container) bool {
 	a, runs := c1.Data, c2.Data
 	out := a[:0]
+	runAt := 0
 
 	for _, val := range a {
-		// Check if value is in any run
-		inRun := false
-		for i := 0; i < len(runs); i += 2 {
-			if val >= runs[i] && val <= runs[i+1] {
-				inRun = true
-				break
-			}
+		for runAt < len(runs) && runs[runAt+1] < val {
+			runAt += 2
 		}
-		if !inRun {
+
+		if runAt >= len(runs) || val < runs[runAt] {
 			out = append(out, val)
 		}
 	}
@@ -188,27 +185,31 @@ func (rb *Bitmap) runAndNotArr(c1, c2 *container) bool {
 	runs, arr := c1.Data, c2.Data
 	out := rb.scratch[:0]
 	size := uint32(0)
+	arrAt := 0
 
 	for i := 0; i < len(runs); i += 2 {
 		start, end := uint32(runs[i]), uint32(runs[i+1])
-
-		// For each run, exclude elements that are in the array
 		currStart := start
-		for _, val := range arr {
+
+		for arrAt < len(arr) && uint32(arr[arrAt]) < currStart {
+			arrAt++
+		}
+
+		for arrAt < len(arr) {
+			val := arr[arrAt]
 			val32 := uint32(val)
-			if val32 < currStart || val32 > end {
-				continue // Value not in current run
+			if val32 > end {
+				break
 			}
 
-			// Add run segment before this value
 			if currStart < val32 {
 				out = append(out, uint16(currStart), uint16(val32-1))
 				size += (val32 - 1) - currStart + 1
 			}
 			currStart = val32 + 1
+			arrAt++
 		}
 
-		// Add remaining part of run
 		if currStart <= end {
 			out = append(out, uint16(currStart), uint16(end))
 			size += end - currStart + 1
