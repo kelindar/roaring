@@ -22,8 +22,8 @@ func (rb *Bitmap) xor(other *Bitmap) {
 
 	// Merge containers from both bitmaps using XOR logic
 	i, j := 0, 0
-	var newContainers []container
-	var newIndex []uint16
+	newContainers := make([]container, 0, len(rb.containers)+len(other.containers))
+	newIndex := make([]uint16, 0, len(rb.index)+len(other.index))
 
 	for i < len(rb.containers) && j < len(other.containers) {
 		hi1, hi2 := rb.index[i], other.index[j]

@@ -100,6 +100,23 @@ func TestAnd(t *testing.T) {
 	}
 }
 
+func TestAndCompactsMissingContainersWithoutScratchAlias(t *testing.T) {
+	a := New()
+	a.ctrAdd(0, 0, newArr(1))
+	a.ctrAdd(1, 1, newBmp(1, 2, 3))
+
+	b := New()
+	b.ctrAdd(1, 0, newArr(2, 3))
+
+	a.And(b)
+
+	assert.Equal(t, 2, a.Count())
+	assert.False(t, a.Contains(1))
+	assert.False(t, a.Contains(1<<16|1))
+	assert.True(t, a.Contains(1<<16|2))
+	assert.True(t, a.Contains(1<<16|3))
+}
+
 func TestAndNot(t *testing.T) {
 	tc := []struct {
 		name   string

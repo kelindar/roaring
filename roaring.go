@@ -81,23 +81,37 @@ func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 		into = New()
 	}
 
-	// Clone containers
 	if cap(into.containers) < len(rb.containers) {
-		into.containers = make([]container, len(rb.containers), cap(rb.containers))
+		into.containers = make([]container, len(rb.containers))
 	}
 	into.containers = into.containers[:len(rb.containers)]
-	for i := range rb.containers {
-		rb.containers[i].Shared = true
-	}
-	copy(into.containers, rb.containers)
 
-	// Clone index
 	if cap(into.index) < len(rb.index) {
-		into.index = make([]uint16, len(rb.index), cap(rb.index))
+		into.index = make([]uint16, len(rb.index))
 	}
-
 	into.index = into.index[:len(rb.index)]
 	copy(into.index, rb.index)
+
+	total := 0
+	for i := range rb.containers {
+		total += cap(rb.containers[i].Data)
+	}
+
+	data := make([]uint16, total)
+	offset := 0
+	for i := range rb.containers {
+		src := rb.containers[i]
+		n := len(src.Data)
+		capacity := cap(src.Data)
+		dst := data[offset : offset+n : offset+capacity]
+		copy(dst, src.Data)
+		src.Data = dst
+		src.Shared = false
+		into.containers[i] = src
+		offset += capacity
+	}
+
+	into.scratch = into.scratch[:0]
 	return into
 }
 

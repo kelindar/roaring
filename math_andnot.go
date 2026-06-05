@@ -12,25 +12,26 @@ func (rb *Bitmap) andNot(other *Bitmap) {
 		return // Empty bitmap AND NOT anything = empty
 	}
 
-	// Remove elements that are in other bitmap
-	rb.scratch = rb.scratch[:0]
-	for i := range rb.containers {
-		c1 := &rb.containers[i]
-		idx, exists := find16(other.index, rb.index[i])
+	write := 0
+	for read := range rb.containers {
+		key := rb.index[read]
+		c1 := &rb.containers[read]
+		idx, exists := find16(other.index, key)
 		switch {
 		case !exists:
-			// Container not in other bitmap - keep as is
-			continue
+			// Keep containers that do not exist in the subtrahend.
 		case !rb.ctrAndNot(c1, &other.containers[idx]):
-			// Container became empty - mark for removal
-			rb.scratch = append(rb.scratch, uint16(i))
+			continue
 		}
-	}
 
-	// Batch remove empty containers (in reverse order to maintain indices)
-	for i := len(rb.scratch) - 1; i >= 0; i-- {
-		rb.ctrDel(int(rb.scratch[i]))
+		if write != read {
+			rb.containers[write] = rb.containers[read]
+			rb.index[write] = key
+		}
+		write++
 	}
+	rb.containers = rb.containers[:write]
+	rb.index = rb.index[:write]
 }
 
 // ctrAndNot performs efficient AND NOT between two containers
