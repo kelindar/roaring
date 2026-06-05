@@ -6,8 +6,8 @@ github.com/bits-and-blooms/bitset v1.24.4/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/kelindar/bench v0.3.0 h1:Gbi8yhLorcsdVGZ6jF+5cLJnKFKjANtsse+w3GB6LcI=
-github.com/kelindar/bench v0.3.0/go.mod h1:GawbXTnuxXM2DOGHllromLgWIU9vqWc0eXoKGkY6tZc=
+github.com/kelindar/bench v0.3.1 h1:Qa6Z2FOcAn2ZuMvJ5MD/8dlHUK1B5sZoMIhiA8c2Hfo=
+github.com/kelindar/bench v0.3.1/go.mod h1:GawbXTnuxXM2DOGHllromLgWIU9vqWc0eXoKGkY6tZc=
 github.com/kelindar/bitmap v1.5.5 h1:KJv3rmpEpzLVZDXztzx8tJkgqiNw3rqJiHI10EfoFzA=
 github.com/kelindar/bitmap v1.5.5/go.mod h1:0SdRw+q7Yne2DomiBfZnLaXyrn3pNo7FX7LkjmWtfeg=
 github.com/kelindar/simd v1.2.0 h1:1nSnINZRchuZwjnfqM01gV04RkJg0zz62ZC4hZQRYis=
