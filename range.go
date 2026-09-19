@@ -13,18 +13,19 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 
 		switch c.Type {
 		case typeArray:
-			data := c.Data
-			for j := 0; j < len(data); j++ {
-				if !fn(base | uint32(data[j])) {
+			for _, value := range c.Data {
+				if !fn(base | uint32(value)) {
 					return
 				}
 			}
-
 		case typeBitmap:
-			if !c.bmpRange(func(value uint32) bool {
-				return fn(base | value)
-			}) {
-				return
+			for j, word := range c.bmp() {
+				for word != 0 {
+					if !fn(base | uint32(j<<6) | uint32(bits.TrailingZeros64(word))) {
+						return
+					}
+					word &= word - 1
+				}
 			}
 
 		case typeRun:
@@ -81,7 +82,7 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 		case typeRun:
 			c.fork()
 			runs := c.Data
-			out := runs[:0]
+			out := make([]uint16, 0, len(runs))
 			size := uint32(0)
 
 			for i := 0; i < len(runs); i += 2 {
@@ -124,21 +125,4 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 	for i := len(rb.scratch) - 1; i >= 0; i-- {
 		rb.ctrDel(int(rb.scratch[i]))
 	}
-}
-
-// Iterate iterates over all of the bits set to one in this bitmap.
-func (c *container) bmpRange(fn func(x uint32) bool) bool {
-	dst := c.bmp()
-	for blkAt := 0; blkAt < len(dst); blkAt++ {
-		blk := dst[blkAt]
-		offset := uint32(blkAt << 6)
-		for blk != 0 {
-			bit := uint32(bits.TrailingZeros64(blk))
-			if !fn(offset + bit) {
-				return false
-			}
-			blk &= blk - 1
-		}
-	}
-	return true
 }

@@ -5,6 +5,7 @@ package roaring
 
 import (
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -394,6 +395,10 @@ func TestClone(t *testing.T) {
 		assert.False(t, clone.Contains(2000))
 		assert.Equal(t, 1001, original.Count())
 		assert.Equal(t, 1000, clone.Count())
+
+		clone.Set(3000)
+		assert.True(t, clone.Contains(3000))
+		assert.False(t, original.Contains(3000))
 	})
 
 	t.Run("clone_into_existing", func(t *testing.T) {
@@ -412,6 +417,59 @@ func TestClone(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			assert.True(t, clone.Contains(uint32(i)))
 		}
+	})
+}
+
+func TestContainerTailClearedOnTruncate(t *testing.T) {
+	t.Run("clear", func(t *testing.T) {
+		rb := bitmapOf(0, 1<<16, 2<<16)
+		assert.Greater(t, cap(rb.containers), len(rb.containers))
+
+		rb.Clear()
+
+		assert.Equal(t, 0, len(rb.containers))
+		assert.True(t, containerTailCleared(rb))
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		rb := bitmapOf(0, 1<<16, 2<<16)
+		assert.Greater(t, cap(rb.containers), len(rb.containers))
+
+		rb.Remove(1 << 16)
+
+		assert.Equal(t, 2, len(rb.containers))
+		assert.True(t, containerTailCleared(rb))
+	})
+
+	t.Run("and compaction", func(t *testing.T) {
+		rb := bitmapOf(0, 1<<16, 2<<16)
+		assert.Greater(t, cap(rb.containers), len(rb.containers))
+
+		rb.And(bitmapOf(1 << 16))
+
+		assert.Equal(t, []uint32{1 << 16}, values32(rb))
+		assert.True(t, containerTailCleared(rb))
+	})
+
+	t.Run("andnot compaction", func(t *testing.T) {
+		rb := bitmapOf(0, 1<<16, 2<<16)
+		assert.Greater(t, cap(rb.containers), len(rb.containers))
+
+		rb.AndNot(bitmapOf(0, 2<<16))
+
+		assert.Equal(t, []uint32{1 << 16}, values32(rb))
+		assert.True(t, containerTailCleared(rb))
+	})
+
+	t.Run("clone into smaller", func(t *testing.T) {
+		src := bitmapOf(5)
+		into := bitmapOf(0, 1<<16, 2<<16)
+		assert.Greater(t, cap(into.containers), len(src.containers))
+
+		src.Clone(into)
+
+		assert.Equal(t, []uint32{5}, values32(into))
+		assert.True(t, containerTailCleared(into))
 	})
 }
 
@@ -519,4 +577,94 @@ func TestMinMax(t *testing.T) {
 		}
 	})*/
 
+}
+
+func TestMinZeroAcrossContainers(t *testing.T) {
+	rb := New()
+	for i := uint32(0); i <= 65535; i++ {
+		rb.Set(i)
+	}
+	rb.Set(2 << 16)
+
+	minZero, ok := rb.MinZero()
+	assert.True(t, ok)
+	assert.Equal(t, uint32(1<<16), minZero)
+}
+
+func TestRunContainerBoundaries(t *testing.T) {
+	t.Run("set merges adjacent runs", func(t *testing.T) {
+		c := newRun(1, 2, 4, 5)
+
+		assert.True(t, c.runSet(3))
+		assert.False(t, c.runSet(3))
+		assert.Equal(t, []uint16{1, 5}, c.Data)
+		assert.Equal(t, uint32(5), c.Size)
+	})
+
+	t.Run("delete splits run", func(t *testing.T) {
+		c := newRun(9, 10, 11, 12, 13)
+
+		assert.True(t, c.runDel(11))
+		assert.Equal(t, []uint16{9, 10, 12, 13}, c.Data)
+		assert.Equal(t, uint32(4), c.Size)
+	})
+
+	t.Run("delete edges and single", func(t *testing.T) {
+		c := newRun(1, 2, 3)
+
+		assert.True(t, c.runDel(1))
+		assert.Equal(t, []uint16{2, 3}, c.Data)
+		assert.True(t, c.runDel(3))
+		assert.Equal(t, []uint16{2, 2}, c.Data)
+		assert.True(t, c.runDel(2))
+		assert.Empty(t, c.Data)
+		assert.False(t, c.runDel(2))
+		assert.Equal(t, uint32(0), c.Size)
+	})
+
+	t.Run("find empty before after", func(t *testing.T) {
+		c := newRun()
+		idx, ok := c.runFind(1)
+		assert.False(t, ok)
+		assert.Equal(t, 0, idx)
+
+		c = newRun(10, 11, 20, 21)
+		idx, ok = c.runFind(9)
+		assert.False(t, ok)
+		assert.Equal(t, 0, idx)
+		idx, ok = c.runFind(22)
+		assert.False(t, ok)
+		assert.Equal(t, 2, idx)
+	})
+}
+
+func TestSearchBoundaries(t *testing.T) {
+	for _, size := range []int{0, 1, 16, 17, 32, 256, 2048} {
+		values := make([]uint16, size)
+		for i := range values {
+			values[i] = uint16(i * 31)
+		}
+		for target := 0; target <= 65535; target++ {
+			want, found := slices.BinarySearch(values, uint16(target))
+			got, exists := find16(values, uint16(target))
+			if !assert.Equal(t, want, got) || !assert.Equal(t, found, exists) {
+				t.Fatalf("size=%d target=%d", size, target)
+			}
+		}
+	}
+}
+
+func TestArraySpan(t *testing.T) {
+	c := &container{Type: typeArray}
+	for value := 0; value < 65535; value += 21 {
+		c.Data = append(c.Data, uint16(value))
+	}
+	c.Data = append(c.Data, 65535)
+	c.Size = uint32(len(c.Data))
+	want := slices.Clone(c.Data)
+	c.optimize()
+	assert.Equal(t, typeBitmap, c.Type)
+	bm, got := bitmapWith(c)
+	assert.Equal(t, want, got)
+	assert.Equal(t, len(want), bm.Count())
 }

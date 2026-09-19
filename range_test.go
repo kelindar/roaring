@@ -426,3 +426,35 @@ func TestRangeStop(t *testing.T) {
 
 	assert.Equal(t, 63, count)
 }
+
+func TestRangeStopByContainerType(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		c    *container
+	}{
+		{"array", newArr(1, 2, 3)},
+		{"bitmap", newBmp(1, 2, 3)},
+		{"run", newRun(1, 2, 3)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rb, _ := bitmapWith(tt.c)
+			var got []uint32
+
+			rb.Range(func(x uint32) bool {
+				got = append(got, x)
+				return len(got) < 2
+			})
+
+			assert.Equal(t, []uint32{1, 2}, got)
+		})
+	}
+}
+
+func TestFilterSplit(t *testing.T) {
+	bm, _ := bitmapWith(&container{Type: typeRun, Size: 7, Data: []uint16{1, 4, 10, 12}})
+	clone := bm.Clone(nil)
+	bm.Filter(func(x uint32) bool { return x == 1 || x == 4 || x >= 10 })
+	assert.Equal(t, []uint32{1, 4, 10, 11, 12}, values32(bm))
+	assert.Equal(t, 5, bm.Count())
+	assert.Equal(t, []uint32{1, 2, 3, 4, 10, 11, 12}, values32(clone))
+}

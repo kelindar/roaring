@@ -59,7 +59,7 @@ func (c *container) arrIsDense() bool {
 	}
 
 	lo, hi := c.Data[0], c.Data[len(c.Data)-1]
-	span := int(hi - lo + 1)
+	span := int(hi) - int(lo) + 1
 	size := len(c.Data)
 
 	// Quick density filters

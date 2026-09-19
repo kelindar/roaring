@@ -6,6 +6,9 @@ package roaring
 // xor performs XOR with a single bitmap efficiently
 func (rb *Bitmap) xor(other *Bitmap) {
 	switch {
+	case rb == other:
+		rb.Clear()
+		return
 	case other == nil || len(other.containers) == 0:
 		return // No change needed
 	case len(rb.containers) == 0:
@@ -20,10 +23,29 @@ func (rb *Bitmap) xor(other *Bitmap) {
 		return
 	}
 
-	// Merge containers from both bitmaps using XOR logic
-	i, j := 0, 0
+	// Compact matching keys in place before allocating a merged index.
+	i, j, write := 0, 0, 0
+	for i < len(rb.index) && j < len(other.index) && rb.index[i] == other.index[j] {
+		if rb.ctrXor(&rb.containers[i], &other.containers[j]) {
+			rb.containers[write] = rb.containers[i]
+			rb.index[write] = rb.index[i]
+			write++
+		}
+		i++
+		j++
+	}
+	if j == len(other.index) {
+		copy(rb.index[write:], rb.index[i:])
+		write += copy(rb.containers[write:], rb.containers[i:])
+		clearContainerTail(rb.containers, write)
+		rb.containers = rb.containers[:write]
+		rb.index = rb.index[:write]
+		return
+	}
 	newContainers := make([]container, 0, len(rb.containers)+len(other.containers))
 	newIndex := make([]uint16, 0, len(rb.index)+len(other.index))
+	newContainers = append(newContainers, rb.containers[:write]...)
+	newIndex = append(newIndex, rb.index[:write]...)
 
 	for i < len(rb.containers) && j < len(other.containers) {
 		hi1, hi2 := rb.index[i], other.index[j]
@@ -111,23 +133,37 @@ func (rb *Bitmap) ctrXor(c1, c2 *container) bool {
 func (rb *Bitmap) arrXorArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	out := rb.scratch[:0]
+	if cap(out) < max(len(a), len(b)) {
+		out = make([]uint16, 0, len(a)+len(b))
+	}
 	i, j := 0, 0
 
-	for i < len(a) && j < len(b) {
-		av, bv := a[i], b[j]
-		switch {
-		case av == bv:
-			// Same element in both - exclude from XOR
-			i++
-			j++
-		case av < bv:
-			// Only in first array
-			out = append(out, av)
-			i++
-		default: // av > bv
-			// Only in second array
-			out = append(out, bv)
-			j++
+	if len(rb.index) >= branchlessAt {
+		for i < len(a) && j < len(b) {
+			av, bv := uint32(a[i]), uint32(b[j])
+			less, greater := int((av-bv)>>31), int((bv-av)>>31)
+			out = append(out, uint16(min(av, bv)))
+			out = out[:len(out)-1+less+greater]
+			i += 1 - greater
+			j += 1 - less
+		}
+	} else {
+		for i < len(a) && j < len(b) {
+			av, bv := a[i], b[j]
+			switch {
+			case av == bv:
+				// Same element in both - exclude from XOR
+				i++
+				j++
+			case av < bv:
+				// Only in first array
+				out = append(out, av)
+				i++
+			default: // av > bv
+				// Only in second array
+				out = append(out, bv)
+				j++
+			}
 		}
 	}
 
@@ -142,9 +178,9 @@ func (rb *Bitmap) arrXorArr(c1, c2 *container) bool {
 		j++
 	}
 
-	c1.Data = append(c1.Data[:0], out...)
+	rb.scratch = c1.Data[:0]
+	c1.Data = out
 	c1.Size = uint32(len(c1.Data))
-	rb.scratch = out
 	return c1.Size > 0
 }
 

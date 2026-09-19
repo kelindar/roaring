@@ -24,6 +24,33 @@ func valuesOf(v *Bitmap) []uint16 {
 	return out
 }
 
+func values32(v *Bitmap) []uint32 {
+	out := []uint32{}
+	v.Range(func(x uint32) bool {
+		out = append(out, x)
+		return true
+	})
+	return out
+}
+
+func bitmapOf(data ...uint32) *Bitmap {
+	v := New()
+	for _, x := range data {
+		v.Set(x)
+	}
+	return v
+}
+
+func containerTailCleared(v *Bitmap) bool {
+	tail := v.containers[len(v.containers):cap(v.containers)]
+	for _, c := range tail {
+		if c.Data != nil || c.Size != 0 || c.Shared || c.Call != 0 || c.Type != typeArray {
+			return false
+		}
+	}
+	return true
+}
+
 func newArr(data ...uint32) *container {
 	return newContainer(typeArray, data...)
 }

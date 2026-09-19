@@ -18,7 +18,10 @@ func New() *Bitmap {
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	idx, exists := find16(rb.index, hi)
+	idx, exists := 0, len(rb.index) > 0
+	if !exists || rb.index[0] != hi {
+		idx, exists = find16(rb.index, hi)
+	}
 	if !exists {
 		rb.ctrAdd(hi, idx, &container{
 			Type: typeArray,
@@ -26,18 +29,51 @@ func (rb *Bitmap) Set(x uint32) {
 			Data: make([]uint16, 0, 64),
 		})
 	}
-	rb.containers[idx].set(lo)
+	c := &rb.containers[idx]
+	c.fork()
+	var changed bool
+	switch c.Type {
+	case typeArray:
+		changed = c.arrSet(lo)
+	case typeBitmap:
+		changed = c.bmpSet(lo)
+	case typeRun:
+		changed = c.runSet(lo)
+	}
+	if changed {
+		c.tryOptimize()
+	}
 }
 
 // Remove removes the bit x from the bitmap
 func (rb *Bitmap) Remove(x uint32) {
-	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	idx, exists := find16(rb.index, hi)
-	if !exists || !rb.containers[idx].remove(lo) {
+	if len(rb.index) == 0 {
 		return
 	}
-
-	if rb.containers[idx].isEmpty() {
+	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
+	idx, exists := 0, len(rb.index) > 0
+	if !exists || rb.index[0] != hi {
+		idx, exists = find16(rb.index, hi)
+	}
+	if !exists {
+		return
+	}
+	c := &rb.containers[idx]
+	c.fork()
+	var changed bool
+	switch c.Type {
+	case typeArray:
+		changed = c.arrDel(lo)
+	case typeBitmap:
+		changed = c.bmpDel(lo)
+	case typeRun:
+		changed = c.runDel(lo)
+	}
+	if !changed {
+		return
+	}
+	c.tryOptimize()
+	if c.isEmpty() {
 		rb.ctrDel(idx)
 	}
 }
@@ -45,12 +81,24 @@ func (rb *Bitmap) Remove(x uint32) {
 // Contains checks whether a value is contained in the bitmap
 func (rb *Bitmap) Contains(x uint32) bool {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	idx, exists := find16(rb.index, hi)
+	idx, exists := 0, len(rb.index) > 0
+	if !exists || rb.index[0] != hi {
+		idx, exists = find16(rb.index, hi)
+	}
 	if !exists {
 		return false
 	}
 
-	return rb.containers[idx].contains(lo)
+	c := &rb.containers[idx]
+	switch c.Type {
+	case typeArray:
+		return c.arrHas(lo)
+	case typeBitmap:
+		return c.bmpHas(lo)
+	case typeRun:
+		return c.runHas(lo)
+	}
+	return false
 }
 
 // Count returns the total number of bits set to 1 in the bitmap
@@ -64,6 +112,7 @@ func (rb *Bitmap) Count() int {
 
 // Clear clears the bitmap
 func (rb *Bitmap) Clear() {
+	clearContainerTail(rb.containers, 0)
 	rb.containers = rb.containers[:0]
 	rb.index = rb.index[:0]
 }
@@ -75,44 +124,46 @@ func (rb *Bitmap) Optimize() {
 	}
 }
 
-// Clone clones the bitmap
+// Clone copies the bitmap into an independently mutable bitmap.
 func (rb *Bitmap) Clone(into *Bitmap) *Bitmap {
 	if into == nil {
 		into = New()
 	}
+	rb.cloneInto(into)
+	return into
+}
 
+// Keep allocation in the small, inlineable caller so temporary bitmaps stay on the stack.
+func (rb *Bitmap) cloneInto(into *Bitmap) {
+	if into == rb {
+		return
+	}
 	if cap(into.containers) < len(rb.containers) {
 		into.containers = make([]container, len(rb.containers))
 	}
 	into.containers = into.containers[:len(rb.containers)]
-
+	clearContainerTail(into.containers, len(rb.containers))
 	if cap(into.index) < len(rb.index) {
 		into.index = make([]uint16, len(rb.index))
 	}
 	into.index = into.index[:len(rb.index)]
 	copy(into.index, rb.index)
 
+	// One allocation keeps container payloads contiguous and avoids a fork per mutation.
 	total := 0
-	for i := range rb.containers {
-		total += cap(rb.containers[i].Data)
+	for _, c := range rb.containers {
+		total += cap(c.Data)
 	}
-
 	data := make([]uint16, total)
-	offset := 0
-	for i := range rb.containers {
-		src := rb.containers[i]
-		n := len(src.Data)
-		capacity := cap(src.Data)
-		dst := data[offset : offset+n : offset+capacity]
-		copy(dst, src.Data)
-		src.Data = dst
-		src.Shared = false
-		into.containers[i] = src
-		offset += capacity
+	for i, c := range rb.containers {
+		n, capacity := len(c.Data), cap(c.Data)
+		copy(data, c.Data)
+		c.Data = data[:n:capacity]
+		c.Shared = false
+		into.containers[i] = c
+		data = data[capacity:]
 	}
-
 	into.scratch = into.scratch[:0]
-	return into
 }
 
 // And performs bitwise AND operation with other bitmap(s)
@@ -239,13 +290,30 @@ func (rb *Bitmap) ctrDel(pos int) {
 		return
 	}
 
+	// Dropping the first container needs no shift. Clear its payload before reslicing.
+	if pos == 0 && len(rb.containers) > 1 {
+		rb.containers[0] = container{}
+		rb.containers = rb.containers[1:]
+		rb.index[0] = 0
+		rb.index = rb.index[1:]
+		return
+	}
+
 	// Remove container by shifting slice
+	last := len(rb.containers) - 1
 	copy(rb.containers[pos:], rb.containers[pos+1:])
-	rb.containers = rb.containers[:len(rb.containers)-1]
+	rb.containers[last] = container{}
+	rb.containers = rb.containers[:last]
 
 	// Keep index in sync
+	last = len(rb.index) - 1
 	copy(rb.index[pos:], rb.index[pos+1:])
-	rb.index = rb.index[:len(rb.index)-1]
+	rb.index[last] = 0
+	rb.index = rb.index[:last]
+}
+
+func clearContainerTail(containers []container, keep int) {
+	clear(containers[keep:cap(containers)])
 }
 
 // find16 returns the first index whose value is ≥ target.
@@ -260,19 +328,24 @@ func find16(a []uint16, target uint16) (index int, found bool) {
 		return 0, false
 	case target <= a[0]:
 		return 0, target == a[0]
-	case target > a[n-1]:
+	case target >= a[n-1]:
+		if target == a[n-1] {
+			return n - 1, true
+		}
 		return n, false
 	}
 
-	// binary phase: shrink search window to ≤16
-	lo, hi := 0, n
+	// binary phase: shrink search window to ≤16, returning exact hits early.
+	lo, hi := 1, n
 	for hi-lo > 16 {
 		mid := (lo + hi) >> 1
-		switch {
-		case a[mid] < target:
+		value := a[mid]
+		if value < target {
 			lo = mid + 1
-		case a[mid] >= target:
-			hi = mid // keep mid in the candidate range
+		} else if value > target {
+			hi = mid
+		} else {
+			return mid, true
 		}
 	}
 

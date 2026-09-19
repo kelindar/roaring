@@ -4,3 +4,4 @@
 GEMINI.md
 *.gob
 bench.json
+/bench/*.txt

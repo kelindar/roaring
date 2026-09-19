@@ -12,11 +12,14 @@ func (rb *Bitmap) andNot(other *Bitmap) {
 		return // Empty bitmap AND NOT anything = empty
 	}
 
-	write := 0
+	write, idx := 0, 0
 	for read := range rb.containers {
 		key := rb.index[read]
 		c1 := &rb.containers[read]
-		idx, exists := find16(other.index, key)
+		for idx < len(other.index) && other.index[idx] < key {
+			idx++
+		}
+		exists := idx < len(other.index) && other.index[idx] == key
 		switch {
 		case !exists:
 			// Keep containers that do not exist in the subtrahend.
@@ -30,6 +33,7 @@ func (rb *Bitmap) andNot(other *Bitmap) {
 		}
 		write++
 	}
+	clearContainerTail(rb.containers, write)
 	rb.containers = rb.containers[:write]
 	rb.index = rb.index[:write]
 }
@@ -75,20 +79,31 @@ func (rb *Bitmap) arrAndNotArr(c1, c2 *container) bool {
 	out := a[:0]
 	i, j := 0, 0
 
-	for i < len(a) && j < len(b) {
-		av, bv := a[i], b[j]
-		switch {
-		case av == bv:
-			// Element in both - exclude from result
-			i++
-			j++
-		case av < bv:
-			// Only in first array - keep it
-			out = append(out, av)
-			i++
-		default: // av > bv
-			// Only in second array - skip it
-			j++
+	if len(rb.index) >= branchlessAt {
+		for i < len(a) && j < len(b) {
+			av, bv := uint32(a[i]), uint32(b[j])
+			less, greater := int((av-bv)>>31), int((bv-av)>>31)
+			out = append(out, uint16(av))
+			out = out[:len(out)-1+less]
+			i += 1 - greater
+			j += 1 - less
+		}
+	} else {
+		for i < len(a) && j < len(b) {
+			av, bv := a[i], b[j]
+			switch {
+			case av == bv:
+				// Element in both - exclude from result
+				i++
+				j++
+			case av < bv:
+				// Only in first array - keep it
+				out = append(out, av)
+				i++
+			default: // av > bv
+				// Only in second array - skip it
+				j++
+			}
 		}
 	}
 

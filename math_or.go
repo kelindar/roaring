@@ -20,10 +20,20 @@ func (rb *Bitmap) or(other *Bitmap) {
 		return
 	}
 
-	// Merge containers from both bitmaps
+	// Update the common prefix in place before allocating a merged index.
 	i, j := 0, 0
+	for i < len(rb.index) && j < len(other.index) && rb.index[i] == other.index[j] {
+		rb.ctrOr(&rb.containers[i], &other.containers[j])
+		i++
+		j++
+	}
+	if j == len(other.index) {
+		return
+	}
 	newContainers := make([]container, 0, len(rb.containers)+len(other.containers))
 	newIndex := make([]uint16, 0, len(rb.index)+len(other.index))
+	newContainers = append(newContainers, rb.containers[:i]...)
+	newIndex = append(newIndex, rb.index[:i]...)
 
 	for i < len(rb.containers) && j < len(other.containers) {
 		hi1, hi2 := rb.index[i], other.index[j]
@@ -108,21 +118,34 @@ func (rb *Bitmap) ctrOr(c1, c2 *container) {
 func (rb *Bitmap) arrOrArr(c1, c2 *container) {
 	a, b := c1.Data, c2.Data
 	out := rb.scratch[:0]
+	if cap(out) < max(len(a), len(b)) {
+		out = make([]uint16, 0, len(a)+len(b))
+	}
 	i, j := 0, 0
 
-	for i < len(a) && j < len(b) {
-		av, bv := a[i], b[j]
-		switch {
-		case av == bv:
-			out = append(out, av)
-			i++
-			j++
-		case av < bv:
-			out = append(out, av)
-			i++
-		default: // av > bv
-			out = append(out, bv)
-			j++
+	if len(rb.index) >= branchlessAt {
+		for i < len(a) && j < len(b) {
+			av, bv := uint32(a[i]), uint32(b[j])
+			less, greater := int((av-bv)>>31), int((bv-av)>>31)
+			out = append(out, uint16(min(av, bv)))
+			i += 1 - greater
+			j += 1 - less
+		}
+	} else {
+		for i < len(a) && j < len(b) {
+			av, bv := a[i], b[j]
+			switch {
+			case av == bv:
+				out = append(out, av)
+				i++
+				j++
+			case av < bv:
+				out = append(out, av)
+				i++
+			default: // av > bv
+				out = append(out, bv)
+				j++
+			}
 		}
 	}
 
@@ -136,9 +159,9 @@ func (rb *Bitmap) arrOrArr(c1, c2 *container) {
 		j++
 	}
 
-	c1.Data = append(c1.Data[:0], out...)
+	rb.scratch = c1.Data[:0]
+	c1.Data = out
 	c1.Size = uint32(len(c1.Data))
-	rb.scratch = out
 }
 
 // arrOrBmp performs OR between array and bitmap containers
@@ -244,81 +267,30 @@ func (rb *Bitmap) runOrBmp(c1, c2 *container) {
 func (rb *Bitmap) runOrRun(c1, c2 *container) {
 	a, b := c1.Data, c2.Data
 	out := rb.scratch[:0]
-	i, j := 0, 0
+	if cap(out) < max(len(a), len(b)) {
+		out = make([]uint16, 0, len(a)+len(b))
+	}
 	size := uint32(0)
-
-	for i < len(a) && j < len(b) {
-		s1, e1 := uint32(a[i]), uint32(a[i+1])
-		s2, e2 := uint32(b[j]), uint32(b[j+1])
-
-		// Find union of overlapping runs
-		us, ue := s1, e1
-		if s2 < us {
-			us = s2
-		}
-		if e2 > ue {
-			ue = e2
-		}
-
-		// Check if runs overlap or are adjacent
-		if s1 <= e2+1 && s2 <= e1+1 {
-			// Merge runs - advance both and continue merging
-			switch {
-			case e1 < e2:
-				i += 2
-			case e2 < e1:
-				j += 2
-			default:
-				i += 2
-				j += 2
-			}
-
-			// Keep merging adjacent/overlapping runs
-			for i < len(a) && uint32(a[i]) <= ue+1 {
-				if uint32(a[i+1]) > ue {
-					ue = uint32(a[i+1])
-				}
-				i += 2
-			}
-			for j < len(b) && uint32(b[j]) <= ue+1 {
-				if uint32(b[j+1]) > ue {
-					ue = uint32(b[j+1])
-				}
-				j += 2
-			}
-
-			out = append(out, uint16(us), uint16(ue))
-			size += ue - us + 1
-		} else if s1 < s2 {
-			// Non-overlapping, take first run
-			out = append(out, uint16(s1), uint16(e1))
-			size += e1 - s1 + 1
-			i += 2
+	for len(a) > 0 || len(b) > 0 {
+		var start, end uint16
+		if len(b) == 0 || len(a) > 0 && a[0] <= b[0] {
+			start, end = a[0], a[1]
+			a = a[2:]
 		} else {
-			// Non-overlapping, take second run
-			out = append(out, uint16(s2), uint16(e2))
-			size += e2 - s2 + 1
-			j += 2
+			start, end = b[0], b[1]
+			b = b[2:]
+		}
+		if n := len(out); n > 0 && uint32(start) <= uint32(out[n-1])+1 {
+			if end > out[n-1] {
+				size += uint32(end) - uint32(out[n-1])
+				out[n-1] = end
+			}
+		} else {
+			out = append(out, start, end)
+			size += uint32(end) - uint32(start) + 1
 		}
 	}
-
-	// Add remaining runs from first container
-	for i < len(a) {
-		s, e := uint32(a[i]), uint32(a[i+1])
-		out = append(out, uint16(s), uint16(e))
-		size += e - s + 1
-		i += 2
-	}
-
-	// Add remaining runs from second container
-	for j < len(b) {
-		s, e := uint32(b[j]), uint32(b[j+1])
-		out = append(out, uint16(s), uint16(e))
-		size += e - s + 1
-		j += 2
-	}
-
-	c1.Data = append(c1.Data[:0], out...)
+	rb.scratch = c1.Data[:0]
+	c1.Data = out
 	c1.Size = size
-	rb.scratch = out
 }

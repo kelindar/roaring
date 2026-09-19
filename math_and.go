@@ -13,11 +13,14 @@ func (rb *Bitmap) and(other *Bitmap) {
 		return
 	}
 
-	write := 0
+	write, idx := 0, 0
 	for read := range rb.containers {
 		key := rb.index[read]
 		c1 := &rb.containers[read]
-		idx, exists := find16(other.index, key)
+		for idx < len(other.index) && other.index[idx] < key {
+			idx++
+		}
+		exists := idx < len(other.index) && other.index[idx] == key
 		switch {
 		case !exists:
 			continue
@@ -31,6 +34,7 @@ func (rb *Bitmap) and(other *Bitmap) {
 		}
 		write++
 	}
+	clearContainerTail(rb.containers, write)
 	rb.containers = rb.containers[:write]
 	rb.index = rb.index[:write]
 }
@@ -74,18 +78,29 @@ func (rb *Bitmap) ctrAnd(c1, c2 *container) bool {
 func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	i, j, k := 0, 0, 0
-	for i < len(a) && j < len(b) {
-		av, bv := a[i], b[j]
-		switch {
-		case av == bv:
-			a[k] = av
-			k++
-			i++
-			j++
-		case av < bv:
-			i++
-		default: // av > bv
-			j++
+	if len(rb.index) >= branchlessAt {
+		for i < len(a) && j < len(b) {
+			av, bv := uint32(a[i]), uint32(b[j])
+			less, greater := int((av-bv)>>31), int((bv-av)>>31)
+			a[k] = uint16(av)
+			k += 1 - less - greater
+			i += 1 - greater
+			j += 1 - less
+		}
+	} else {
+		for i < len(a) && j < len(b) {
+			av, bv := a[i], b[j]
+			switch {
+			case av == bv:
+				a[k] = av
+				k++
+				i++
+				j++
+			case av < bv:
+				i++
+			default: // av > bv
+				j++
+			}
 		}
 	}
 

@@ -7,11 +7,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"math/bits"
 	"unsafe"
 )
 
-var isLittleEndian = binary.LittleEndian.Uint16([]byte{1, 0}) == 1
+var isLittleEndian = binary.NativeEndian.Uint16([]byte{1, 0}) == 1
 
 // ToBytes converts the bitmap to a byte slice
 func (rb *Bitmap) ToBytes() []byte {
@@ -26,28 +25,21 @@ func (rb *Bitmap) ToBytes() []byte {
 // WriteTo writes the bitmap to a writer
 func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 	var n int64
+	var header [7]byte
 
 	// Write number of containers
 	count := uint32(len(rb.containers))
-	if err := binary.Write(w, binary.LittleEndian, count); err != nil {
+	binary.LittleEndian.PutUint32(header[:4], count)
+	written, err := writeBytes(w, header[:4])
+	n += int64(written)
+	if err != nil {
 		return n, err
 	}
-	n += 4
 
 	for i, c := range rb.containers {
 		key := rb.index[i]
-
-		// Write key (uint16)
-		if err := binary.Write(w, binary.LittleEndian, key); err != nil {
-			return n, err
-		}
-		n += 2
-
-		// Write type (byte)
-		if err := binary.Write(w, binary.LittleEndian, c.Type); err != nil {
-			return n, err
-		}
-		n += 1
+		binary.LittleEndian.PutUint16(header[:2], key)
+		header[2] = byte(c.Type)
 
 		// Prepare payload
 		var payload []uint16
@@ -63,20 +55,27 @@ func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 			payload = c.Data[:len(c.Data)]
 			sizeBytes = uint32(len(payload)) * 2
 		default:
+			written, err = writeBytes(w, header[:3])
+			n += int64(written)
+			if err != nil {
+				return n, err
+			}
 			return n, io.ErrUnexpectedEOF
 		}
 
-		// Write size (uint32)
-		if err := binary.Write(w, binary.LittleEndian, sizeBytes); err != nil {
+		binary.LittleEndian.PutUint32(header[3:], sizeBytes)
+		written, err = writeBytes(w, header[:])
+		n += int64(written)
+		if err != nil {
 			return n, err
 		}
-		n += 4
 
 		// Write payload ([]uint16)
-		if err := writeUint16s(w, isLittleEndian, payload); err != nil {
+		written, err = writeUint16sCount(w, isLittleEndian, payload)
+		n += int64(written)
+		if err != nil {
 			return n, err
 		}
-		n += int64(sizeBytes)
 	}
 	return n, nil
 }
@@ -85,38 +84,40 @@ func (rb *Bitmap) WriteTo(w io.Writer) (int64, error) {
 func (rb *Bitmap) ReadFrom(r io.Reader) (int64, error) {
 	rb.Clear()
 	var n int64
+	var header [7]byte
 
 	// Read number of containers
-	var count uint32
-	if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
+	read, err := io.ReadFull(r, header[:4])
+	n += int64(read)
+	if err != nil {
 		return n, err
 	}
-	n += 4
+	count := binary.LittleEndian.Uint32(header[:4])
+	if count > 1<<16 {
+		return n, io.ErrUnexpectedEOF
+	}
+	if cap(rb.containers) < int(count) {
+		rb.containers = make([]container, 0, count)
+	}
+	if cap(rb.index) < int(count) {
+		rb.index = make([]uint16, 0, count)
+	}
 
 	for i := uint32(0); i < count; i++ {
-		var key uint16
-		if err := binary.Read(r, binary.LittleEndian, &key); err != nil {
-			return n, err
-		}
-		n += 2
-
-		var typ ctype
-		if err := binary.Read(r, binary.LittleEndian, &typ); err != nil {
-			return n, err
-		}
-		n += 1
-
-		var sizeBytes uint32
-		if err := binary.Read(r, binary.LittleEndian, &sizeBytes); err != nil {
-			return n, err
-		}
-		n += 4
-
-		payload, err := readUint16s(r, isLittleEndian, int(sizeBytes))
+		read, err = io.ReadFull(r, header[:])
+		n += int64(read)
 		if err != nil {
 			return n, err
 		}
-		n += int64(sizeBytes)
+		key := binary.LittleEndian.Uint16(header[:2])
+		typ := ctype(header[2])
+		sizeBytes := binary.LittleEndian.Uint32(header[3:])
+
+		payload, read, err := readUint16sCount(r, isLittleEndian, int(sizeBytes))
+		n += int64(read)
+		if err != nil {
+			return n, err
+		}
 
 		switch typ {
 		case typeArray:
@@ -126,17 +127,22 @@ func (rb *Bitmap) ReadFrom(r io.Reader) (int64, error) {
 				Data: payload,
 			})
 		case typeBitmap:
-			// Count bits set for Size
-			sz := uint32(0)
-			for _, v := range payload {
-				sz += uint32(bits.OnesCount16(v))
+			if len(payload) != 4096 {
+				return n, io.ErrUnexpectedEOF
 			}
+
+			// Count bits set for Size
+			sz := uint32(asBitmap(payload).Count())
 			rb.ctrAdd(key, len(rb.containers), &container{
 				Type: typ,
 				Size: sz,
 				Data: payload,
 			})
 		case typeRun:
+			if len(payload)%2 != 0 {
+				return n, io.ErrUnexpectedEOF
+			}
+
 			// Calculate run cardinality
 			sz := uint32(0)
 			for i := 0; i+1 < len(payload); i += 2 {
@@ -157,8 +163,8 @@ func (rb *Bitmap) ReadFrom(r io.Reader) (int64, error) {
 // FromBytes creates a roaring bitmap from a byte buffer
 func FromBytes(buffer []byte) *Bitmap {
 	rb := New()
-	_, err := rb.ReadFrom(bytes.NewReader(buffer))
-	if err != nil && err != io.EOF {
+	n, err := rb.ReadFrom(bytes.NewReader(buffer))
+	if err != nil && (err != io.EOF || n != 0) {
 		panic(err)
 	}
 	return rb
@@ -167,8 +173,8 @@ func FromBytes(buffer []byte) *Bitmap {
 // ReadFrom reads a roaring bitmap from an io.Reader
 func ReadFrom(r io.Reader) (*Bitmap, error) {
 	rb := New()
-	_, err := rb.ReadFrom(r)
-	if err != nil && err != io.EOF {
+	n, err := rb.ReadFrom(r)
+	if err != nil && (err != io.EOF || n != 0) {
 		return nil, err
 	}
 	return rb, nil
@@ -177,32 +183,76 @@ func ReadFrom(r io.Reader) (*Bitmap, error) {
 // writeUint16s writes a slice of uint16s to a writer, converting it to []byte if
 // the machine is little endian.
 func writeUint16s(w io.Writer, isLittleEndian bool, data []uint16) error {
-	switch isLittleEndian {
-	case true:
-		buf := unsafe.Slice((*byte)(unsafe.Pointer(&data[0])), len(data)*2)
-		_, err := w.Write(buf)
-		return err
-	default:
-		return binary.Write(w, binary.LittleEndian, data)
+	_, err := writeUint16sCount(w, isLittleEndian, data)
+	return err
+}
+
+func writeUint16sCount(w io.Writer, isLittleEndian bool, data []uint16) (int, error) {
+	if len(data) == 0 {
+		return 0, nil
 	}
+
+	if isLittleEndian {
+		buf := unsafe.Slice((*byte)(unsafe.Pointer(&data[0])), len(data)*2)
+		return writeBytes(w, buf)
+	}
+
+	buf := make([]byte, len(data)*2)
+	for i, value := range data {
+		binary.LittleEndian.PutUint16(buf[i*2:], value)
+	}
+	return writeBytes(w, buf)
 }
 
 // readUint16s reads a slice of uint16s from a reader, converting it to []uint16 if
 // the machine is little endian.
 func readUint16s(r io.Reader, isLittleEndian bool, sizeBytes int) ([]uint16, error) {
+	out, _, err := readUint16sCount(r, isLittleEndian, sizeBytes)
+	return out, err
+}
+
+func readUint16sCount(r io.Reader, isLittleEndian bool, sizeBytes int) ([]uint16, int, error) {
+	if sizeBytes < 0 || sizeBytes%2 != 0 {
+		return nil, 0, io.ErrUnexpectedEOF
+	}
+
 	count := sizeBytes / 2
 	out := make([]uint16, count)
 	if count == 0 {
-		return out, nil
+		return out, 0, nil
 	}
 
-	switch isLittleEndian {
-	case true:
+	if isLittleEndian {
 		buf := unsafe.Slice((*byte)(unsafe.Pointer(&out[0])), sizeBytes)
-		_, err := io.ReadFull(r, buf)
-		return out, err
-	default:
-		err := binary.Read(r, binary.LittleEndian, out)
-		return out, err
+		read, err := io.ReadFull(r, buf)
+		return out, read, err
 	}
+
+	buf := make([]byte, sizeBytes)
+	read, err := io.ReadFull(r, buf)
+	if err != nil {
+		return out, read, err
+	}
+	for i := range out {
+		out[i] = binary.LittleEndian.Uint16(buf[i*2:])
+	}
+	return out, read, nil
+}
+
+func writeBytes(w io.Writer, data []byte) (int, error) {
+	if len(data) == 0 {
+		return 0, nil
+	}
+
+	written, err := w.Write(data)
+	if written < 0 || written > len(data) {
+		return 0, io.ErrShortWrite
+	}
+	if err != nil {
+		return written, err
+	}
+	if written != len(data) {
+		return written, io.ErrShortWrite
+	}
+	return written, nil
 }

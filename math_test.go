@@ -435,3 +435,295 @@ func TestXorArrayRunKeepsSearchableResult(t *testing.T) {
 		assert.False(t, a.Contains(value), "value %d should be removed", value)
 	}
 }
+
+func TestPublicOperationsWithExtras(t *testing.T) {
+	t.Run("and", func(t *testing.T) {
+		a := bitmapOf(1, 2, 3, 4)
+		a.And(bitmapOf(2, 3, 4), nil, bitmapOf(3, 4))
+		assert.Equal(t, []uint32{3, 4}, values32(a))
+	})
+
+	t.Run("andnot", func(t *testing.T) {
+		a := bitmapOf(1, 2, 3, 4)
+		a.AndNot(bitmapOf(2), nil, bitmapOf(4))
+		assert.Equal(t, []uint32{1, 3}, values32(a))
+	})
+
+	t.Run("or", func(t *testing.T) {
+		a := bitmapOf(1)
+		a.Or(bitmapOf(2), nil, bitmapOf(3))
+		assert.Equal(t, []uint32{1, 2, 3}, values32(a))
+	})
+
+	t.Run("xor", func(t *testing.T) {
+		a := bitmapOf(1, 2)
+		a.Xor(bitmapOf(2, 3), nil, bitmapOf(3, 4))
+		assert.Equal(t, []uint32{1, 4}, values32(a))
+	})
+}
+
+func TestPublicOperationEmptyAndNilBranches(t *testing.T) {
+	t.Run("and nil", func(t *testing.T) {
+		a := bitmapOf(1)
+		a.And(nil)
+		assert.Empty(t, values32(a))
+	})
+
+	t.Run("andnot nil", func(t *testing.T) {
+		a := bitmapOf(1)
+		a.AndNot(nil)
+		assert.Equal(t, []uint32{1}, values32(a))
+	})
+
+	t.Run("or empty", func(t *testing.T) {
+		a := bitmapOf(1)
+		a.Or(New())
+		assert.Equal(t, []uint32{1}, values32(a))
+	})
+
+	t.Run("xor empty", func(t *testing.T) {
+		a := bitmapOf(1)
+		a.Xor(New())
+		assert.Equal(t, []uint32{1}, values32(a))
+	})
+
+	t.Run("empty or", func(t *testing.T) {
+		a := New()
+		a.Or(bitmapOf(2))
+		assert.Equal(t, []uint32{2}, values32(a))
+	})
+
+	t.Run("empty xor", func(t *testing.T) {
+		a := New()
+		a.Xor(bitmapOf(2))
+		assert.Equal(t, []uint32{2}, values32(a))
+	})
+}
+
+func TestSharedContainerCopyOnWrite(t *testing.T) {
+	tests := []struct {
+		name string
+		op   func(dst, src *Bitmap)
+	}{
+		{"or", func(dst, src *Bitmap) { dst.Or(src) }},
+		{"xor", func(dst, src *Bitmap) { dst.Xor(src) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := bitmapOf(1, 2, 1<<16|3)
+			dst := New()
+
+			tt.op(dst, src)
+			dst.Remove(1)
+			dst.Set(4)
+			src.Remove(2)
+			src.Set(5)
+
+			assert.False(t, src.Contains(4))
+			assert.True(t, src.Contains(1))
+			assert.False(t, dst.Contains(5))
+			assert.True(t, dst.Contains(2))
+			assert.True(t, dst.Contains(1<<16|3))
+		})
+	}
+}
+
+func TestRunUnion(t *testing.T) {
+	a, _ := bitmapWith(&container{Type: typeRun, Size: 19, Data: []uint16{1, 10, 12, 20}})
+	b, _ := bitmapWith(&container{Type: typeRun, Size: 98, Data: []uint16{1, 2, 5, 100}})
+	a.Or(b)
+	assert.Equal(t, []uint16{1, 100}, a.containers[0].Data)
+	assert.Equal(t, 100, a.Count())
+	assert.Len(t, values32(a), 100)
+	assert.Equal(t, []uint16{1, 2, 5, 100}, b.containers[0].Data)
+}
+
+func TestSelfXor(t *testing.T) {
+	for _, c := range []*container{newArr(1, 3, 4, 5), newBmp(1, 3, 4, 5), newRun(1, 3, 4, 5)} {
+		bm, _ := bitmapWith(c)
+		bm.Xor(bm, bitmapOf(65535))
+		assert.Equal(t, []uint32{65535}, values32(bm))
+		assert.Equal(t, 1, bm.Count())
+	}
+}
+
+func TestMathModel(t *testing.T) {
+	types := []struct {
+		name string
+		typ  ctype
+	}{
+		{"array", typeArray},
+		{"bitmap", typeBitmap},
+		{"run", typeRun},
+	}
+	keys := []uint16{0, 2, 65535}
+	leftData := map[uint16][]uint16{
+		0:     {0, 1, 2, 10, 11, 65534, 65535},
+		2:     {0, 4, 5, 65535},
+		65535: {0, 65534, 65535},
+	}
+	rightKeys := []uint16{0, 1, 65535}
+	rightData := map[uint16][]uint16{
+		0:     {1, 2, 3, 10, 12, 65535},
+		1:     {0, 1, 5, 65534},
+		65535: {1, 65535},
+	}
+
+	makeBitmap := func(typ ctype, useKeys []uint16, data map[uint16][]uint16) *Bitmap {
+		out := New()
+		for _, key := range useKeys {
+			values := make([]uint32, len(data[key]))
+			for i, value := range data[key] {
+				values[i] = uint32(value)
+			}
+			out.ctrAdd(key, len(out.containers), newContainer(typ, values...))
+		}
+		return out
+	}
+
+	toSet := func(values []uint32) map[uint32]struct{} {
+		out := make(map[uint32]struct{}, len(values))
+		for _, value := range values {
+			out[value] = struct{}{}
+		}
+		return out
+	}
+	cloneSet := func(values map[uint32]struct{}) map[uint32]struct{} {
+		out := make(map[uint32]struct{}, len(values))
+		for value := range values {
+			out[value] = struct{}{}
+		}
+		return out
+	}
+	oracle := func(op string, left, right map[uint32]struct{}) map[uint32]struct{} {
+		out := cloneSet(left)
+		switch op {
+		case "and":
+			for value := range out {
+				if _, ok := right[value]; !ok {
+					delete(out, value)
+				}
+			}
+		case "andnot":
+			for value := range right {
+				delete(out, value)
+			}
+		case "or":
+			for value := range right {
+				out[value] = struct{}{}
+			}
+		case "xor":
+			for value := range right {
+				if _, ok := out[value]; ok {
+					delete(out, value)
+				} else {
+					out[value] = struct{}{}
+				}
+			}
+		}
+		return out
+	}
+	ordered := func(values map[uint32]struct{}) []uint32 {
+		out := make([]uint32, 0, len(values))
+		for value := range values {
+			out = append(out, value)
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+		return out
+	}
+
+	operations := []struct {
+		name  string
+		apply func(*Bitmap, *Bitmap)
+	}{
+		{"and", func(left, right *Bitmap) { left.And(right) }},
+		{"andnot", func(left, right *Bitmap) { left.AndNot(right) }},
+		{"or", func(left, right *Bitmap) { left.Or(right) }},
+		{"xor", func(left, right *Bitmap) { left.Xor(right) }},
+	}
+
+	for _, leftType := range types {
+		for _, rightType := range types {
+			left := makeBitmap(leftType.typ, keys, leftData)
+			right := makeBitmap(rightType.typ, rightKeys, rightData)
+			leftValues := values32(left)
+			rightValues := values32(right)
+			leftSet := toSet(leftValues)
+			rightSet := toSet(rightValues)
+
+			for _, operation := range operations {
+				t.Run(leftType.name+"/"+rightType.name+"/"+operation.name, func(t *testing.T) {
+					working := left.Clone(nil)
+					first := oracle(operation.name, leftSet, rightSet)
+					second := oracle(operation.name, first, rightSet)
+
+					for step, expected := range []map[uint32]struct{}{first, second} {
+						operation.apply(working, right)
+						values := values32(working)
+						assert.True(t, sort.SliceIsSorted(values, func(i, j int) bool { return values[i] < values[j] }))
+						assert.Equal(t, ordered(expected), values)
+						assert.Equal(t, len(expected), working.Count(), "step %d count", step)
+						for value := range leftSet {
+							_, want := expected[value]
+							assert.Equal(t, want, working.Contains(value), "step %d value %d", step, value)
+						}
+						for value := range rightSet {
+							_, want := expected[value]
+							assert.Equal(t, want, working.Contains(value), "step %d value %d", step, value)
+						}
+						assert.Equal(t, leftValues, values32(left), "left source changed at step %d", step)
+						assert.Equal(t, rightValues, values32(right), "right source changed at step %d", step)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestXorCompaction(t *testing.T) {
+	for _, right := range []*Bitmap{bitmapOf(1), bitmapOf(1, 2<<16|1)} {
+		left := bitmapOf(1, 1<<16|1, 2<<16|1)
+		left.Xor(right)
+		assert.True(t, left.Contains(1<<16|1))
+		assert.False(t, left.Contains(1))
+		assert.Equal(t, !right.Contains(2<<16|1), left.Contains(2<<16|1))
+		assert.True(t, containerTailCleared(left))
+	}
+}
+
+func TestMathLarge(t *testing.T) {
+	for _, count := range []int{branchlessAt - 1, branchlessAt, branchlessAt + 1} {
+		left, right := New(), New()
+		for key := 0; key < count; key++ {
+			for _, value := range []uint32{0, 2, 4, 65535} {
+				left.Set(uint32(key)<<16 | value)
+			}
+			for _, value := range []uint32{1, 2, 4, 65534} {
+				right.Set(uint32(key)<<16 | value)
+			}
+		}
+		for _, operation := range []struct {
+			apply func(*Bitmap, *Bitmap)
+			want  []uint32
+		}{
+			{func(a, b *Bitmap) { a.And(b) }, []uint32{2, 4}},
+			{func(a, b *Bitmap) { a.AndNot(b) }, []uint32{0, 65535}},
+			{func(a, b *Bitmap) { a.Or(b) }, []uint32{0, 1, 2, 4, 65534, 65535}},
+			{func(a, b *Bitmap) { a.Xor(b) }, []uint32{0, 1, 65534, 65535}},
+		} {
+			result := left.Clone(nil)
+			operation.apply(result, right)
+			want := make([]uint32, 0, count*len(operation.want))
+			for key := 0; key < count; key++ {
+				for _, value := range operation.want {
+					want = append(want, uint32(key)<<16|value)
+				}
+			}
+			assert.Equal(t, want, values32(result))
+			assert.Equal(t, len(want), result.Count())
+			assert.Equal(t, count*4, left.Count())
+			assert.Equal(t, count*4, right.Count())
+		}
+	}
+}
