@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/RoaringBitmap/roaring v1.9.4
-	github.com/kelindar/bench v0.4.0
+	github.com/kelindar/bench v0.4.1
 	github.com/kelindar/roaring v0.0.0
 )
 

@@ -13,8 +13,8 @@ github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiU
 github.com/google/go-cmp v0.5.6/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
-github.com/kelindar/bench v0.4.0 h1:Ea4/r2OCayAH3ENicndUvinzkKegA9bUPCsCFaRGyi8=
-github.com/kelindar/bench v0.4.0/go.mod h1:7439UZCDVYf+TJVCRZJdYp7OiJ+DmAwwN+52VJE+kfA=
+github.com/kelindar/bench v0.4.1 h1:m9ejnTAKsln8sWcnBxkliqxb8pBevoOPsuwqM1eL56I=
+github.com/kelindar/bench v0.4.1/go.mod h1:7439UZCDVYf+TJVCRZJdYp7OiJ+DmAwwN+52VJE+kfA=
 github.com/kelindar/bitmap v1.5.5 h1:KJv3rmpEpzLVZDXztzx8tJkgqiNw3rqJiHI10EfoFzA=
 github.com/kelindar/bitmap v1.5.5/go.mod h1:0SdRw+q7Yne2DomiBfZnLaXyrn3pNo7FX7LkjmWtfeg=
 github.com/kelindar/simd v1.2.0 h1:1nSnINZRchuZwjnfqM01gV04RkJg0zz62ZC4hZQRYis=
