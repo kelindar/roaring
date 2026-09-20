@@ -948,3 +948,42 @@ func TestMathLarge(t *testing.T) {
 		}
 	}
 }
+
+func TestMathTypes(t *testing.T) {
+	types := []struct {
+		name string
+		typ  ctype
+	}{
+		{"array", typeArray},
+		{"bitmap", typeBitmap},
+		{"run", typeRun},
+	}
+	ops := []struct {
+		name  string
+		apply func(*Bitmap, *Bitmap)
+		want  []uint32
+	}{
+		{"and", func(left, right *Bitmap) { left.And(right) }, []uint32{2, 3}},
+		{"andnot", func(left, right *Bitmap) { left.AndNot(right) }, []uint32{1, 4}},
+		{"or", func(left, right *Bitmap) { left.Or(right) }, []uint32{1, 2, 3, 4, 5, 6}},
+		{"xor", func(left, right *Bitmap) { left.Xor(right) }, []uint32{1, 4, 5, 6}},
+	}
+
+	for _, op := range ops {
+		for _, leftType := range types {
+			for _, rightType := range types {
+				name := op.name + "/" + leftType.name + "/" + rightType.name
+				t.Run(name, func(t *testing.T) {
+					left := New()
+					left.ctrAdd(0, 0, newContainer(leftType.typ, 1, 2, 3, 4))
+					right := New()
+					right.ctrAdd(0, 0, newContainer(rightType.typ, 2, 3, 5, 6))
+
+					op.apply(left, right)
+
+					assert.Equal(t, op.want, values32(left))
+				})
+			}
+		}
+	}
+}

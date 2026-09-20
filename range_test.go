@@ -40,6 +40,27 @@ func TestRange(t *testing.T) {
 	}
 }
 
+func TestRangeBitmap(t *testing.T) {
+	c := container{
+		Type: typeBitmap,
+		Size: 1 << 16,
+		Data: make([]uint16, bitmapSize),
+	}
+	for i := range c.Data {
+		c.Data[i] = ^uint16(0)
+	}
+
+	rb := New()
+	rb.ctrAdd(0, 0, &c)
+	count := 0
+	rb.Range(func(uint32) bool {
+		count++
+		return true
+	})
+
+	assert.Equal(t, 1<<16, count)
+}
+
 func TestFilter(t *testing.T) {
 	t.Run("filter_even_numbers", func(t *testing.T) {
 		rb := New()

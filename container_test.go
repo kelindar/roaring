@@ -30,3 +30,46 @@ func TestContainer(t *testing.T) {
 		assert.Equal(t, uint32(1), c.Size)
 	})
 }
+
+func TestContainerBitmap(t *testing.T) {
+	t.Run("empty extrema", func(t *testing.T) {
+		c := container{Type: typeBitmap, Data: make([]uint16, bitmapSize)}
+
+		_, minOK := c.min()
+		_, maxOK := c.max()
+		zero, zeroOK := c.minZero()
+
+		assert.False(t, minOK)
+		assert.False(t, maxOK)
+		assert.True(t, zeroOK)
+		assert.Zero(t, zero)
+	})
+
+	t.Run("populated extrema", func(t *testing.T) {
+		c := container{Type: typeBitmap, Data: make([]uint16, bitmapSize)}
+		assert.True(t, c.bmpSet(3))
+		assert.True(t, c.bmpSet(65535))
+		assert.False(t, c.bmpSet(3))
+
+		min, minOK := c.min()
+		max, maxOK := c.max()
+		zero, zeroOK := c.minZero()
+
+		assert.True(t, minOK)
+		assert.Equal(t, uint16(3), min)
+		assert.True(t, maxOK)
+		assert.Equal(t, uint16(65535), max)
+		assert.True(t, zeroOK)
+		assert.Zero(t, zero)
+	})
+
+	t.Run("full has no zero", func(t *testing.T) {
+		c := container{Type: typeBitmap, Data: make([]uint16, bitmapSize), Size: 1 << 16}
+		for i := range c.Data {
+			c.Data[i] = ^uint16(0)
+		}
+
+		_, ok := c.minZero()
+		assert.False(t, ok)
+	})
+}
