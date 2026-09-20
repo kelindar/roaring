@@ -109,8 +109,8 @@ del 1M (seq)         6.7 ns       150.1M       0             ✅ +11%
 del 1M (rnd)         6.7 ns       149.6M       0             ✅ +10%
 del 1M (sps)         6.6 ns       150.9M       0             ✅ +11%
 del 1M (dns)         6.6 ns       151.2M       0             ✅ +11%
-and 1K (seq)         806.8 ns     1.2M         4             ❔ uncertain
-and 1K (rnd)         579.9 ns     1.7M         4             ❔ uncertain
+and 1K (seq)         733.1 ns     1.4M         4             🟰 similar
+and 1K (rnd)         539.3 ns     1.9M         4             ❔ uncertain
 and 1K (sps)         1.1 µs       874.3K       4             ❔ uncertain
 and 1K (dns)         83.4 ns      12.0M         4             ✅ +55%
 and 1M (seq)         23.9 µs      41.8K         4             ✅ +57%
@@ -126,7 +126,7 @@ or 1M (rnd)          25.3 µs      39.5K         4             ✅ +44%
 or 1M (sps)          2.0 ms       489           5             ❔ uncertain
 or 1M (dns)          2.8 µs       357.4K        4             ✅ +266x
 xor 1K (seq)         1.2 µs       825.1K        5             ✅ +5.5x
-xor 1K (rnd)         971.9 ns     1.0M          5             ❔ uncertain
+xor 1K (rnd)         862.7 ns     1.2M          5             🟰 similar
 xor 1K (sps)         1.5 µs       668.1K        5             ✅ +26%
 xor 1K (dns)         107.1 ns     9.3M          5             ✅ +38x
 xor 1M (seq)         26.2 µs      38.2K         4             ✅ +47%

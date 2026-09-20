@@ -420,7 +420,7 @@ func TestClone(t *testing.T) {
 	})
 }
 
-func TestContainerTailClearedOnTruncate(t *testing.T) {
+func TestContainerTail(t *testing.T) {
 	t.Run("clear", func(t *testing.T) {
 		rb := bitmapOf(0, 1<<16, 2<<16)
 		assert.Greater(t, cap(rb.containers), len(rb.containers))
@@ -579,7 +579,7 @@ func TestMinMax(t *testing.T) {
 
 }
 
-func TestMinZeroAcrossContainers(t *testing.T) {
+func TestMinZero(t *testing.T) {
 	rb := New()
 	for i := uint32(0); i <= 65535; i++ {
 		rb.Set(i)

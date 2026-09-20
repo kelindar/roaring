@@ -237,7 +237,7 @@ func TestFilter(t *testing.T) {
 	})
 }
 
-func TestRangeAndFilterConsistency(t *testing.T) {
+func TestRangeFilter(t *testing.T) {
 	t.Run("range_after_filter", func(t *testing.T) {
 		rb := New()
 
@@ -408,7 +408,7 @@ func TestEdgeCases(t *testing.T) {
 	})
 }
 
-func TestRangeStop(t *testing.T) {
+func TestRangeCutoff(t *testing.T) {
 	rb := New()
 	rb.ctrAdd(0, 0, newBmpPermutations())
 
@@ -427,7 +427,7 @@ func TestRangeStop(t *testing.T) {
 	assert.Equal(t, 63, count)
 }
 
-func TestRangeStopByContainerType(t *testing.T) {
+func TestRangeStop(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		c    *container

@@ -4,11 +4,232 @@
 package roaring
 
 import (
+	"math/rand/v2"
 	"sort"
 	"testing"
 
+	"github.com/kelindar/bitmap"
 	"github.com/stretchr/testify/assert"
 )
+
+func bitmapWith(c *container) (*Bitmap, []uint16) {
+	v := New()
+	v.ctrAdd(0, 0, c)
+	return v, valuesOf(v)
+}
+
+func valuesOf(v *Bitmap) []uint16 {
+	out := []uint16{}
+	v.Range(func(x uint32) bool {
+		out = append(out, uint16(x))
+		return true
+	})
+	return out
+}
+
+func values32(v *Bitmap) []uint32 {
+	out := []uint32{}
+	v.Range(func(x uint32) bool {
+		out = append(out, x)
+		return true
+	})
+	return out
+}
+
+func bitmapOf(data ...uint32) *Bitmap {
+	v := New()
+	for _, x := range data {
+		v.Set(x)
+	}
+	return v
+}
+
+func containerTailCleared(v *Bitmap) bool {
+	tail := v.containers[len(v.containers):cap(v.containers)]
+	for _, c := range tail {
+		if c.Data != nil || c.Size != 0 || c.Shared || c.Call != 0 || c.Type != typeArray {
+			return false
+		}
+	}
+	return true
+}
+
+func newArr(data ...uint32) *container {
+	return newContainer(typeArray, data...)
+}
+
+func newRun(data ...uint32) *container {
+	return newContainer(typeRun, data...)
+}
+
+func newBmp(data ...uint32) *container {
+	return newContainer(typeBitmap, data...)
+}
+
+// newBmpPermutations creates a Bitmap with all 16 4-bit permutations
+func newBmpPermutations() *container {
+	rb := newBmp()
+	for perm := 0; perm < 16; perm++ {
+		offset := perm * 4
+		for bit := 0; bit < 4; bit++ {
+			if (perm>>bit)&1 == 1 {
+				rb.bmpSet(uint16(offset + bit))
+			}
+		}
+	}
+	return rb
+}
+
+func newContainer(typ ctype, data ...uint32) *container {
+	c := &container{
+		Type: typeArray,
+		Data: make([]uint16, 0, len(data)),
+	}
+
+	for _, v := range data {
+		c.arrSet(uint16(v))
+	}
+
+	switch typ {
+	case typeBitmap:
+		c.arrToBmp()
+	case typeRun:
+		arrToRun(c) // force
+	}
+	return c
+}
+
+// arrToRun attempts to convert array to run in a single pass
+func arrToRun(c *container) {
+	c.Type = typeRun
+	if len(c.Data) == 0 {
+		return
+	}
+
+	runsData := make([]uint16, 0, len(c.Data)/2)
+	i0 := c.Data[0]
+	i1 := c.Data[0]
+
+	for i := 1; i < len(c.Data); i++ {
+		if c.Data[i] == i1+1 {
+			i1 = c.Data[i]
+		} else {
+			runsData = append(runsData, i0, i1)
+			i0 = c.Data[i]
+			i1 = c.Data[i]
+		}
+	}
+
+	c.Data = append(runsData, i0, i1)
+}
+
+// testPair creates both our bitmap and reference bitmap with same data
+func testPair(data []uint32) (*Bitmap, *bitmap.Bitmap) {
+	our := New()
+	var ref bitmap.Bitmap
+	for _, v := range data {
+		our.Set(v)
+		ref.Set(v)
+	}
+	return our, &ref
+}
+
+// changeType creates bitmap that forces specific container types
+func changeType(ctype ctype) (*Bitmap, []uint32) {
+	our := New()
+	var values []uint32
+
+	switch ctype {
+	case typeArray:
+		values = []uint32{1, 5, 10, 100, 500, 1000}
+		for _, v := range values {
+			our.Set(v)
+		}
+	case typeBitmap:
+		for i := 0; i < 5000; i++ {
+			v := uint32(i * 3)
+			our.Set(v)
+			values = append(values, v)
+		}
+	case typeRun:
+		for i := 1000; i <= 2000; i++ {
+			v := uint32(i)
+			our.Set(v)
+			values = append(values, v)
+		}
+		our.Optimize()
+	}
+	return our, values
+}
+
+type dataGen = func() ([]uint32, string)
+
+// genSeq creates consecutive integers starting from offset
+func genSeq(size int, offset uint32) dataGen {
+	return func() ([]uint32, string) {
+		data := make([]uint32, size)
+		for i := 0; i < size; i++ {
+			data[i] = offset + uint32(i)
+		}
+		return data, "seq"
+	}
+}
+
+// genRand creates random integers within a range
+func genRand(size int, maxVal uint32) dataGen {
+	return func() ([]uint32, string) {
+		data := make([]uint32, size)
+		for i := 0; i < size; i++ {
+			data[i] = uint32(rand.IntN(int(maxVal)))
+		}
+		return data, "rnd"
+	}
+}
+
+// genSparse creates sparse integers (large gaps)
+func genSparse(size int) dataGen {
+	return func() ([]uint32, string) {
+		data := make([]uint32, size)
+		for i := 0; i < size; i++ {
+			data[i] = uint32(i * 1000)
+		}
+		return data, "sps"
+	}
+}
+
+// genDense creates dense integers in small range
+func genDense(size int) dataGen {
+	return func() ([]uint32, string) {
+		data := make([]uint32, size)
+		for i := 0; i < size; i++ {
+			data[i] = uint32(rand.IntN(size / 10))
+		}
+		return data, "dns"
+	}
+}
+
+// genBoundary creates boundary/edge case values
+func genBoundary() dataGen {
+	return func() ([]uint32, string) {
+		data := []uint32{0, 65535, 65536, 131071, 131072, 4294967295}
+		return data, "bnd"
+	}
+}
+
+// genMixed creates values across multiple containers
+func genMixed() dataGen {
+	return func() ([]uint32, string) {
+		var data []uint32
+		data = append(data, 1, 5, 10, 100, 500, 1000)
+		for i := 0; i < 1000; i++ {
+			data = append(data, uint32(65536+i*3))
+		}
+		for i := 131072; i <= 131172; i++ {
+			data = append(data, uint32(i))
+		}
+		return data, "mix"
+	}
+}
 
 func TestAnd(t *testing.T) {
 	tc := []struct {
@@ -100,7 +321,7 @@ func TestAnd(t *testing.T) {
 	}
 }
 
-func TestAndCompactsMissingContainersWithoutScratchAlias(t *testing.T) {
+func TestAndCompaction(t *testing.T) {
 	a := New()
 	a.ctrAdd(0, 0, newArr(1))
 	a.ctrAdd(1, 1, newBmp(1, 2, 3))
@@ -421,7 +642,7 @@ func TestXor(t *testing.T) {
 	}
 }
 
-func TestXorArrayRunKeepsSearchableResult(t *testing.T) {
+func TestXorRun(t *testing.T) {
 	a, _ := bitmapWith(newArr(1, 3, 5, 7, 9))
 	b, _ := bitmapWith(newRun(2, 3, 6, 7, 10))
 
@@ -436,7 +657,7 @@ func TestXorArrayRunKeepsSearchableResult(t *testing.T) {
 	}
 }
 
-func TestPublicOperationsWithExtras(t *testing.T) {
+func TestOperationsExtras(t *testing.T) {
 	t.Run("and", func(t *testing.T) {
 		a := bitmapOf(1, 2, 3, 4)
 		a.And(bitmapOf(2, 3, 4), nil, bitmapOf(3, 4))
@@ -462,7 +683,7 @@ func TestPublicOperationsWithExtras(t *testing.T) {
 	})
 }
 
-func TestPublicOperationEmptyAndNilBranches(t *testing.T) {
+func TestOperationsEmpty(t *testing.T) {
 	t.Run("and nil", func(t *testing.T) {
 		a := bitmapOf(1)
 		a.And(nil)
@@ -500,7 +721,7 @@ func TestPublicOperationEmptyAndNilBranches(t *testing.T) {
 	})
 }
 
-func TestSharedContainerCopyOnWrite(t *testing.T) {
+func TestContainerSharing(t *testing.T) {
 	tests := []struct {
 		name string
 		op   func(dst, src *Bitmap)
