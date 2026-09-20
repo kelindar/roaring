@@ -3,6 +3,8 @@
 
 package roaring
 
+import "math/bits"
+
 // Range calls the given function for each value in the bitmap
 func (rb *Bitmap) Range(fn func(x uint32) bool) {
 	for i := range rb.containers {
@@ -11,18 +13,17 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 
 		switch c.Type {
 		case typeArray:
-			data := c.Data
-			for j := 0; j < len(data); j++ {
-				if !fn(base | uint32(data[j])) {
-					return
-				}
-			}
-
-		case typeBitmap:
-			if !c.bmpRange(func(value uint32) bool {
-				return fn(base | value)
-			}) {
+			if !rangeArray(c.Data, base, fn) {
 				return
+			}
+		case typeBitmap:
+			for j, word := range c.bmp() {
+				for word != 0 {
+					if !fn(base | uint32(j<<6) | uint32(bits.TrailingZeros64(word))) {
+						return
+					}
+					word &= word - 1
+				}
 			}
 
 		case typeRun:
@@ -39,12 +40,20 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 	}
 }
 
+func rangeArray(data []uint16, base uint32, fn func(uint32) bool) bool {
+	for i := 0; i < len(data); i++ {
+		if !fn(base | uint32(data[i])) {
+			return false
+		}
+	}
+	return true
+}
+
 // Filter iterates over the bitmap elements and calls a predicate provided for each
 // containing element. If the predicate returns false, the bitmap at the element's
 // position is set to zero.
 func (rb *Bitmap) Filter(f func(x uint32) bool) {
-	// Collect all values to remove first to avoid modification during iteration
-	var toRemove []uint32
+	rb.scratch = rb.scratch[:0]
 
 	for i := range rb.containers {
 		c := &rb.containers[i]
@@ -52,170 +61,75 @@ func (rb *Bitmap) Filter(f func(x uint32) bool) {
 
 		switch c.Type {
 		case typeArray:
+			c.fork()
 			data := c.Data
-			for j := 0; j < len(data); j++ {
-				value := base | uint32(data[j])
-				if !f(value) {
-					toRemove = append(toRemove, value)
+			out := data[:0]
+			for _, value := range data {
+				if f(base | uint32(value)) {
+					out = append(out, value)
 				}
 			}
+			c.Data = out
+			c.Size = uint32(len(out))
 
 		case typeBitmap:
-			c.bmp().Range(func(value uint32) {
-				fullValue := base | value
-				if !f(fullValue) {
-					toRemove = append(toRemove, fullValue)
+			c.fork()
+			count := uint32(0)
+			bmp := c.bmp()
+			bmp.Filter(func(value uint32) bool {
+				keep := f(base | value)
+				if keep {
+					count++
 				}
+				return keep
 			})
+			c.Size = count
+			c.optimize()
 
 		case typeRun:
-			numRuns := len(c.Data) / 2
-			for i := 0; i < numRuns; i++ {
-				start, end := uint32(c.Data[i*2]), uint32(c.Data[i*2+1])
+			c.fork()
+			runs := c.Data
+			out := make([]uint16, 0, len(runs))
+			size := uint32(0)
+
+			for i := 0; i < len(runs); i += 2 {
+				start, end := uint32(runs[i]), uint32(runs[i+1])
+				var keepStart, keepEnd uint32
+				inRun := false
+
 				for curr := start; curr <= end; curr++ {
-					value := base | curr
-					if !f(value) {
-						toRemove = append(toRemove, value)
+					if f(base | curr) {
+						if !inRun {
+							keepStart = curr
+							inRun = true
+						}
+						keepEnd = curr
+						continue
+					}
+
+					if inRun {
+						out = append(out, uint16(keepStart), uint16(keepEnd))
+						size += keepEnd - keepStart + 1
+						inRun = false
 					}
 				}
-			}
-		}
-	}
 
-	// Remove all values that failed the predicate
-	for _, x := range toRemove {
-		rb.Remove(x)
-	}
-}
-
-// Iterate iterates over all of the bits set to one in this bitmap.
-func (c *container) bmpRange(fn func(x uint32) bool) bool {
-	dst := c.bmp()
-	for blkAt := 0; blkAt < len(dst); blkAt++ {
-		blk := dst[blkAt]
-		if blk == 0x0 {
-			continue // Skip the empty page
-		}
-
-		// Iterate in a 4-bit chunks so we can reduce the number of function calls and skip
-		// the bits for which we should not call our range function.
-		offset := uint32(blkAt << 6)
-		for ; blk > 0; blk = blk >> 4 {
-			switch blk & 0b1111 {
-			case 0b0001:
-				if !fn(offset + 0) {
-					return false
-				}
-			case 0b0010:
-				if !fn(offset + 1) {
-					return false
-				}
-			case 0b0011:
-				if !fn(offset + 0) {
-					return false
-				}
-				if !fn(offset + 1) {
-					return false
-				}
-			case 0b0100:
-				if !fn(offset + 2) {
-					return false
-				}
-			case 0b0101:
-				if !fn(offset + 0) {
-					return false
-				}
-				if !fn(offset + 2) {
-					return false
-				}
-			case 0b0110:
-				if !fn(offset + 1) {
-					return false
-				}
-				if !fn(offset + 2) {
-					return false
-				}
-			case 0b0111:
-				if !fn(offset + 0) {
-					return false
-				}
-				if !fn(offset + 1) {
-					return false
-				}
-				if !fn(offset + 2) {
-					return false
-				}
-			case 0b1000:
-				if !fn(offset + 3) {
-					return false
-				}
-			case 0b1001:
-				if !fn(offset + 0) {
-					return false
-				}
-				if !fn(offset + 3) {
-					return false
-				}
-			case 0b1010:
-				if !fn(offset + 1) {
-					return false
-				}
-				if !fn(offset + 3) {
-					return false
-				}
-			case 0b1011:
-				if !fn(offset + 0) {
-					return false
-				}
-				if !fn(offset + 1) {
-					return false
-				}
-				if !fn(offset + 3) {
-					return false
-				}
-			case 0b1100:
-				if !fn(offset + 2) {
-					return false
-				}
-				if !fn(offset + 3) {
-					return false
-				}
-			case 0b1101:
-				if !fn(offset + 0) {
-					return false
-				}
-				if !fn(offset + 2) {
-					return false
-				}
-				if !fn(offset + 3) {
-					return false
-				}
-			case 0b1110:
-				if !fn(offset + 1) {
-					return false
-				}
-				if !fn(offset + 2) {
-					return false
-				}
-				if !fn(offset + 3) {
-					return false
-				}
-			case 0b1111:
-				if !fn(offset + 0) {
-					return false
-				}
-				if !fn(offset + 1) {
-					return false
-				}
-				if !fn(offset + 2) {
-					return false
-				}
-				if !fn(offset + 3) {
-					return false
+				if inRun {
+					out = append(out, uint16(keepStart), uint16(keepEnd))
+					size += keepEnd - keepStart + 1
 				}
 			}
-			offset += 4
+			c.Data = out
+			c.Size = size
+			c.optimize()
+		}
+
+		if c.isEmpty() {
+			rb.scratch = append(rb.scratch, uint16(i))
 		}
 	}
-	return true
+
+	for i := len(rb.scratch) - 1; i >= 0; i-- {
+		rb.ctrDel(int(rb.scratch[i]))
+	}
 }

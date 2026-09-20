@@ -12,25 +12,30 @@ func (rb *Bitmap) andNot(other *Bitmap) {
 		return // Empty bitmap AND NOT anything = empty
 	}
 
-	// Remove elements that are in other bitmap
-	rb.scratch = rb.scratch[:0]
-	for i := range rb.containers {
-		c1 := &rb.containers[i]
-		idx, exists := find16(other.index, rb.index[i])
+	write, idx := 0, 0
+	for read := range rb.containers {
+		key := rb.index[read]
+		c1 := &rb.containers[read]
+		for idx < len(other.index) && other.index[idx] < key {
+			idx++
+		}
+		exists := idx < len(other.index) && other.index[idx] == key
 		switch {
 		case !exists:
-			// Container not in other bitmap - keep as is
-			continue
+			// Keep containers that do not exist in the subtrahend.
 		case !rb.ctrAndNot(c1, &other.containers[idx]):
-			// Container became empty - mark for removal
-			rb.scratch = append(rb.scratch, uint16(i))
+			continue
 		}
-	}
 
-	// Batch remove empty containers (in reverse order to maintain indices)
-	for i := len(rb.scratch) - 1; i >= 0; i-- {
-		rb.ctrDel(int(rb.scratch[i]))
+		if write != read {
+			rb.containers[write] = rb.containers[read]
+			rb.index[write] = key
+		}
+		write++
 	}
+	clearContainerTail(rb.containers, write)
+	rb.containers = rb.containers[:write]
+	rb.index = rb.index[:write]
 }
 
 // ctrAndNot performs efficient AND NOT between two containers
@@ -71,34 +76,38 @@ func (rb *Bitmap) ctrAndNot(c1, c2 *container) bool {
 // arrAndNotArr performs AND NOT between two array containers
 func (rb *Bitmap) arrAndNotArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
-	out := a[:0]
-	i, j := 0, 0
+	i, j, k := 0, 0, 0
 
-	for i < len(a) && j < len(b) {
-		av, bv := a[i], b[j]
-		switch {
-		case av == bv:
-			// Element in both - exclude from result
-			i++
-			j++
-		case av < bv:
-			// Only in first array - keep it
-			out = append(out, av)
-			i++
-		default: // av > bv
-			// Only in second array - skip it
-			j++
+	if len(rb.index) >= branchlessAt {
+		for i < len(a) && j < len(b) {
+			av, bv := uint32(a[i]), uint32(b[j])
+			less, greater := int((av-bv)>>31), int((bv-av)>>31)
+			a[k] = uint16(av)
+			k += less
+			i += 1 - greater
+			j += 1 - less
+		}
+	} else {
+		for i < len(a) && j < len(b) {
+			av, bv := a[i], b[j]
+			switch {
+			case av == bv:
+				i++
+				j++
+			case av < bv:
+				a[k] = av
+				k++
+				i++
+			default:
+				j++
+			}
 		}
 	}
 
-	// Add remaining elements from first array
-	for i < len(a) {
-		out = append(out, a[i])
-		i++
-	}
+	k += copy(a[k:], a[i:])
 
-	c1.Data = out
-	c1.Size = uint32(len(out))
+	c1.Data = a[:k]
+	c1.Size = uint32(k)
 	return c1.Size > 0
 }
 
@@ -122,17 +131,14 @@ func (rb *Bitmap) arrAndNotBmp(c1, c2 *container) bool {
 func (rb *Bitmap) arrAndNotRun(c1, c2 *container) bool {
 	a, runs := c1.Data, c2.Data
 	out := a[:0]
+	runAt := 0
 
 	for _, val := range a {
-		// Check if value is in any run
-		inRun := false
-		for i := 0; i < len(runs); i += 2 {
-			if val >= runs[i] && val <= runs[i+1] {
-				inRun = true
-				break
-			}
+		for runAt < len(runs) && runs[runAt+1] < val {
+			runAt += 2
 		}
-		if !inRun {
+
+		if runAt >= len(runs) || val < runs[runAt] {
 			out = append(out, val)
 		}
 	}
@@ -188,27 +194,31 @@ func (rb *Bitmap) runAndNotArr(c1, c2 *container) bool {
 	runs, arr := c1.Data, c2.Data
 	out := rb.scratch[:0]
 	size := uint32(0)
+	arrAt := 0
 
 	for i := 0; i < len(runs); i += 2 {
 		start, end := uint32(runs[i]), uint32(runs[i+1])
-
-		// For each run, exclude elements that are in the array
 		currStart := start
-		for _, val := range arr {
+
+		for arrAt < len(arr) && uint32(arr[arrAt]) < currStart {
+			arrAt++
+		}
+
+		for arrAt < len(arr) {
+			val := arr[arrAt]
 			val32 := uint32(val)
-			if val32 < currStart || val32 > end {
-				continue // Value not in current run
+			if val32 > end {
+				break
 			}
 
-			// Add run segment before this value
 			if currStart < val32 {
 				out = append(out, uint16(currStart), uint16(val32-1))
 				size += (val32 - 1) - currStart + 1
 			}
 			currStart = val32 + 1
+			arrAt++
 		}
 
-		// Add remaining part of run
 		if currStart <= end {
 			out = append(out, uint16(currStart), uint16(end))
 			size += end - currStart + 1

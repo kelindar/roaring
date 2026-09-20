@@ -3,15 +3,17 @@
 
 package roaring
 
-func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
+func (c *container) runFind(value uint16) (idx int, ok bool) {
 	n := len(c.Data) >> 1
 	switch {
 	case n == 0:
-		return [2]int{0, 0}, false
+		return 0, false
 	case value < c.Data[0]:
-		return [2]int{0, 0}, false
+		return 0, false
+	case value <= c.Data[1]:
+		return 0, true
 	case value > c.Data[(n-1)*2+1]:
-		return [2]int{n, n}, false
+		return n, false
 	}
 
 	// binary phase: shrink window to ≤4 runs
@@ -25,7 +27,7 @@ func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
 		}
 		end := c.Data[mid*2+1]
 		if value <= end { // hit
-			return [2]int{mid, mid}, true
+			return mid, true
 		}
 		lo = mid + 1
 	}
@@ -34,24 +36,33 @@ func (c *container) runFind(value uint16) (idx [2]int, ok bool) {
 	for i := lo; i < hi; i++ {
 		switch {
 		case value < c.Data[i*2]:
-			return [2]int{i, i}, false
+			return i, false
 		case value <= c.Data[i*2+1]:
-			return [2]int{i, i}, true
+			return i, true
 		}
 	}
 
 	// value is greater than end of hi-1 but ≤ lastEnd (already checked)
-	return [2]int{hi, hi}, false
+	return hi, false
 }
 
 // runSet sets a value in a run container
 func (c *container) runSet(value uint16) bool {
+	if n := len(c.Data); n > 0 && value > c.Data[n-1] {
+		if value-c.Data[n-1] == 1 {
+			c.Data[n-1] = value
+		} else {
+			c.Data = append(c.Data, value, value)
+		}
+		c.Size++
+		return true
+	}
 	search, found := c.runFind(value)
 	if found {
 		return false // Value already exists
 	}
 
-	idx := search[1]
+	idx := search
 	numRuns := len(c.Data) / 2
 
 	// Check boundary cases for merging/extending
@@ -81,7 +92,7 @@ func (c *container) runDel(value uint16) bool {
 		return false
 	}
 
-	idx := search[0]
+	idx := search
 	r0 := c.Data[idx*2]
 	r1 := c.Data[idx*2+1]
 	switch {

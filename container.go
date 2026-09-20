@@ -8,6 +8,9 @@ const (
 	runMinSize    = 128
 	runMaxSize    = 2048
 	optimizeEvery = 2048
+
+	// ponytail: use arithmetic merges for large container sets; retune for different CPUs/workloads.
+	branchlessAt = 1024
 )
 
 type ctype byte
@@ -41,52 +44,17 @@ func (c *container) set(value uint16) (ok bool) {
 	c.fork()
 	switch c.Type {
 	case typeArray:
-		if ok = c.arrSet(value); ok {
-			c.tryOptimize()
+		if ok = c.arrSet(value); ok && c.Size > arrMinSize {
+			c.optimize()
 		}
 	case typeBitmap:
-		if ok = c.bmpSet(value); ok {
-			c.tryOptimize()
-		}
+		ok = c.bmpSet(value)
 	case typeRun:
 		if ok = c.runSet(value); ok {
 			c.tryOptimize()
 		}
 	}
 	return
-}
-
-// remove removes a value from the container and returns true if the value was removed (existed before)
-func (c *container) remove(value uint16) (ok bool) {
-	c.fork()
-	switch c.Type {
-	case typeArray:
-		if ok = c.arrDel(value); ok {
-			c.tryOptimize()
-		}
-	case typeBitmap:
-		if ok = c.bmpDel(value); ok {
-			c.tryOptimize()
-		}
-	case typeRun:
-		if ok = c.runDel(value); ok {
-			c.tryOptimize()
-		}
-	}
-	return
-}
-
-// contains checks if a value exists in the container
-func (c *container) contains(value uint16) bool {
-	switch c.Type {
-	case typeArray:
-		return c.arrHas(value)
-	case typeBitmap:
-		return c.bmpHas(value)
-	case typeRun:
-		return c.runHas(value)
-	}
-	return false
 }
 
 // isEmpty returns true if the container has no elements
@@ -109,7 +77,7 @@ func (c *container) optimize() {
 
 // tryOptimize optimizes the container periodically
 func (c *container) tryOptimize() {
-	if c.Call++; c.Call%optimizeEvery == 0 {
+	if c.Call++; c.Call&(optimizeEvery-1) == 0 {
 		c.optimize()
 	}
 }

@@ -37,8 +37,6 @@ func release(v any) {
 	switch v := v.(type) {
 	case []uint16:
 		pool.Put(v[:0])
-	case bitmap.Bitmap:
-		pool.Put(asUint16s(v[:0]))
 	}
 }
 
@@ -51,5 +49,8 @@ func asBitmap(data []uint16) bitmap.Bitmap {
 }
 
 func asUint16s(data bitmap.Bitmap) []uint16 {
+	if len(data) == 0 {
+		return nil
+	}
 	return unsafe.Slice((*uint16)(unsafe.Pointer(&data[0])), len(data)*4)
 }

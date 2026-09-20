@@ -1,6 +1,6 @@
 module github.com/kelindar/roaring
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/kelindar/bitmap v1.5.5
@@ -12,6 +12,6 @@ require (
 	github.com/kelindar/simd v1.2.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -5,11 +5,38 @@ package roaring
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
+	"io"
 	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+var errTestWriter = errors.New("write failed")
+
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) {
+	return 0, errTestWriter
+}
+
+type shortWriter struct {
+	remaining int
+}
+
+func (w *shortWriter) Write(p []byte) (int, error) {
+	if w.remaining == 0 {
+		return 0, io.ErrShortWrite
+	}
+	n := len(p)
+	if n > w.remaining {
+		n = w.remaining
+	}
+	w.remaining -= n
+	return n, nil
+}
 
 func makeTestBitmap() *Bitmap {
 	rb := New()
@@ -110,8 +137,19 @@ func TestCodec_SparseRandom(t *testing.T) {
 	bitmapsEqual(t, rb, rb2)
 }
 
+func TestCodecIsolation(t *testing.T) {
+	original := bitmapOf(1, 2, 1<<16|3, 2<<16|5)
+	decoded := FromBytes(original.ToBytes())
+	decoded.Set(4)
+	decoded.Set(1<<16 | 6)
+
+	want := bitmapOf(1, 2, 4, 1<<16|3, 1<<16|6, 2<<16|5)
+	bitmapsEqual(t, want, decoded)
+}
+
 func TestCodec_BigEndian(t *testing.T) {
 	data := []uint16{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	assert.NoError(t, writeUint16s(&bytes.Buffer{}, true, nil))
 
 	var buf1 bytes.Buffer
 	assert.NoError(t, writeUint16s(&buf1, true, data))
@@ -128,4 +166,73 @@ func TestCodec_BigEndian(t *testing.T) {
 	out2, err := readUint16s(&buf2, false, len(data)*2)
 	assert.NoError(t, err)
 	assert.Equal(t, data, out2)
+}
+
+func TestCodecCounts(t *testing.T) {
+	bm := bitmapOf(1, 2)
+	encoded := bm.ToBytes()
+	for cut := 0; cut < len(encoded); cut++ {
+		n, err := bm.WriteTo(&shortWriter{remaining: cut})
+		assert.Equal(t, int64(cut), n)
+		assert.ErrorIs(t, err, io.ErrShortWrite)
+
+		n, err = New().ReadFrom(bytes.NewReader(encoded[:cut]))
+		assert.Equal(t, int64(cut), n)
+		assert.Error(t, err)
+	}
+}
+func TestCodecErrors(t *testing.T) {
+	t.Run("write error", func(t *testing.T) {
+		_, err := bitmapOf(1).WriteTo(errWriter{})
+		assert.ErrorIs(t, err, errTestWriter)
+	})
+
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{"truncated", []byte{1, 0}},
+		{"invalid type", codecRecord(ctype(99), 0, nil)},
+		{"odd payload", codecRecord(typeArray, 1, []byte{1})},
+		{"short bitmap", codecRecord(typeBitmap, 2, codecPayload(1))},
+		{"malformed run", codecRecord(typeRun, 2, codecPayload(1))},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rb := New()
+			_, err := rb.ReadFrom(bytes.NewReader(tt.data))
+			assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+		})
+	}
+}
+
+func codecRecord(typ ctype, size uint32, payload []byte) []byte {
+	var buf bytes.Buffer
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(1))
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
+	_ = buf.WriteByte(byte(typ))
+	_ = binary.Write(&buf, binary.LittleEndian, size)
+	_, _ = buf.Write(payload)
+	return buf.Bytes()
+}
+
+func codecPayload(values ...uint16) []byte {
+	out := make([]byte, len(values)*2)
+	for i, v := range values {
+		binary.LittleEndian.PutUint16(out[i*2:], v)
+	}
+	return out
+}
+
+func TestCodecTruncated(t *testing.T) {
+	encoded := bitmapOf(1, 2).ToBytes()
+	for cut := 1; cut < len(encoded); cut++ {
+		_, err := ReadFrom(bytes.NewReader(encoded[:cut]))
+		assert.Error(t, err)
+		assert.Panics(t, func() { FromBytes(encoded[:cut]) })
+	}
+	_, err := ReadFrom(bytes.NewReader(nil))
+	assert.NoError(t, err)
+	assert.NotPanics(t, func() { FromBytes(nil) })
 }

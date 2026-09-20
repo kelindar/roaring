@@ -13,23 +13,30 @@ func (rb *Bitmap) and(other *Bitmap) {
 		return
 	}
 
-	// Iterate through all containers in this bitmap
-	rb.scratch = rb.scratch[:0]
-	for i := range rb.containers {
-		c1 := &rb.containers[i]
-		idx, exists := find16(other.index, rb.index[i])
+	write, idx := 0, 0
+	for read := range rb.containers {
+		key := rb.index[read]
+		c1 := &rb.containers[read]
+		for idx < len(other.index) && other.index[idx] < key {
+			idx++
+		}
+		exists := idx < len(other.index) && other.index[idx] == key
 		switch {
 		case !exists:
-			rb.scratch = append(rb.scratch, uint16(i))
+			continue
 		case !rb.ctrAnd(c1, &other.containers[idx]):
-			rb.scratch = append(rb.scratch, uint16(i))
+			continue
 		}
-	}
 
-	// Batch remove empty containers (in reverse order to maintain indices)
-	for i := len(rb.scratch) - 1; i >= 0; i-- {
-		rb.ctrDel(int(rb.scratch[i]))
+		if write != read {
+			rb.containers[write] = rb.containers[read]
+			rb.index[write] = key
+		}
+		write++
 	}
+	clearContainerTail(rb.containers, write)
+	rb.containers = rb.containers[:write]
+	rb.index = rb.index[:write]
 }
 
 // and performs efficient AND between two containers
@@ -71,18 +78,59 @@ func (rb *Bitmap) ctrAnd(c1, c2 *container) bool {
 func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
 	i, j, k := 0, 0, 0
-	for i < len(a) && j < len(b) {
-		av, bv := a[i], b[j]
-		switch {
-		case av == bv:
-			a[k] = av
-			k++
-			i++
-			j++
-		case av < bv:
-			i++
-		default: // av > bv
-			j++
+	if len(rb.index) >= branchlessAt {
+		for i < len(a) && j < len(b) {
+			av, bv := uint32(a[i]), uint32(b[j])
+			less, greater := int((av-bv)>>31), int((bv-av)>>31)
+			a[k] = uint16(av)
+			k += 1 - less - greater
+			i += 1 - greater
+			j += 1 - less
+		}
+	} else {
+		if len(a) > 0 && len(b) > 0 {
+			av, bv := a[0], b[0]
+		main:
+			for {
+				if bv < av {
+					for {
+						j++
+						if j == len(b) {
+							break main
+						}
+						bv = b[j]
+						if bv >= av {
+							break
+						}
+					}
+				}
+				if av < bv {
+					for {
+						i++
+						if i == len(a) {
+							break main
+						}
+						av = a[i]
+						if av >= bv {
+							break
+						}
+					}
+				}
+				if av == bv {
+					a[k] = av
+					k++
+					i++
+					if i == len(a) {
+						break
+					}
+					av = a[i]
+					j++
+					if j == len(b) {
+						break
+					}
+					bv = b[j]
+				}
+			}
 		}
 	}
 

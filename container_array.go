@@ -5,6 +5,12 @@ package roaring
 
 // arrSet sets a value in an array container
 func (c *container) arrSet(value uint16) bool {
+	if n := len(c.Data); n > 0 && value > c.Data[n-1] {
+		c.Data = append(c.Data, value)
+		c.Size++
+		return true
+	}
+
 	idx, exists := find16(c.Data, value)
 	if exists {
 		return false // Already exists
@@ -24,7 +30,7 @@ func (c *container) arrSet(value uint16) bool {
 
 // arrDel removes a value from an array container
 func (c *container) arrDel(value uint16) bool {
-	idx, exists := find16(c.Data, value)
+	idx, exists := find16Delete(c.Data, value)
 	if !exists {
 		return false
 	}
@@ -54,12 +60,12 @@ func (c *container) arrOptimize() {
 
 // arrIsDense quickly estimates if converting to run container would be beneficial
 func (c *container) arrIsDense() bool {
-	if len(c.Data) < 128 {
+	if len(c.Data) < 3 {
 		return false
 	}
 
 	lo, hi := c.Data[0], c.Data[len(c.Data)-1]
-	span := int(hi - lo + 1)
+	span := int(hi) - int(lo) + 1
 	size := len(c.Data)
 
 	// Quick density filters

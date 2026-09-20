@@ -14,8 +14,10 @@ func (c *container) bmp() bitmap.Bitmap {
 
 // bmpSet sets a value in a bitmap container
 func (c *container) bmpSet(value uint16) bool {
-	if b := c.bmp(); !b.Contains(uint32(value)) {
-		b.Set(uint32(value))
+	word := &c.bmp()[value>>6]
+	mask := uint64(1) << (value & 63)
+	if *word&mask == 0 {
+		*word |= mask
 		c.Size++
 		return true
 	}
