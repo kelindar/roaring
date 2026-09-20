@@ -141,14 +141,14 @@ andnot 1M (seq)      25.2 µs      39.8K         4             ✅ +54%
 andnot 1M (rnd)      25.0 µs      40.0K         4             ✅ +71%
 andnot 1M (sps)      1.8 ms       552           4             ✅ +86%
 andnot 1M (dns)      3.2 µs       310.4K        4             ✅ +21x
-range 1K (seq)       538.3 ns     1.9M          0             ❔ uncertain
-range 1K (rnd)       408.9 ns     2.4M          0             ❌ -7%
-range 1K (sps)       583.4 ns     1.7M          0             ❔ uncertain
-range 1K (dns)       116.3 ns     8.6M          0             ❔ uncertain
-range 1M (seq)       552.0 µs     1.8K          0             ✅ +2.7x
-range 1M (rnd)       452.2 µs     2.2K          0             ✅ +2.6x
-range 1M (sps)       574.2 µs     1.7K          0             ✅ +10%
-range 1M (dns)       98.8 µs      10.1K         0             ✅ +2.9x
+range 1K (seq)       397.6 ns     2.5M          0             ✅ +21%
+range 1K (rnd)       355.6 ns     2.8M          0             ✅ +17%
+range 1K (sps)       487.6 ns     2.1M          0             ✅ +19%
+range 1K (dns)       88.0 ns      11.4M         0             ✅ +17%
+range 1M (seq)       386.7 µs     2.6K          0             ✅ +3.9x
+range 1M (rnd)       329.3 µs     3.0K          0             ✅ +3.7x
+range 1M (sps)       480.6 µs     2.1K          0             ✅ +25%
+range 1M (dns)       76.7 µs      13.0K         0             ✅ +3.7x
 ```
 
 

@@ -17,29 +17,53 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 				return
 			}
 		case typeBitmap:
-			for j, word := range c.bmp() {
-				for word != 0 {
-					if !fn(base | uint32(j<<6) | uint32(bits.TrailingZeros64(word))) {
-						return
-					}
-					word &= word - 1
+			// ponytail: materialize once for callback-heavy ranges; this avoids a
+			// second cache and its mutation-invalidation path.
+			if c.Size < 1<<16 {
+				c.bmpToArr()
+				if !rangeArray(c.Data, base, fn) {
+					return
 				}
+			} else if !rangeBitmap(c.bmp(), base, fn) {
+				return
 			}
 
 		case typeRun:
-			numRuns := len(c.Data) / 2
-			for i := 0; i < numRuns; i++ {
-				start, end := uint32(c.Data[i*2]), uint32(c.Data[i*2+1])
-				for curr := start; curr <= end; curr++ {
-					if !fn(base | curr) {
-						return
-					}
-				}
+			if !rangeRun(c.Data, base, fn) {
+				return
 			}
 		}
 	}
 }
 
+//go:noinline
+func rangeBitmap(data []uint64, base uint32, fn func(uint32) bool) bool {
+	for j := 0; j < len(data); j++ {
+		word := data[j]
+		for word != 0 {
+			if !fn(base | uint32(j<<6) | uint32(bits.TrailingZeros64(word))) {
+				return false
+			}
+			word &= word - 1
+		}
+	}
+	return true
+}
+
+func rangeRun(data []uint16, base uint32, fn func(uint32) bool) bool {
+	numRuns := len(data) / 2
+	for i := 0; i < numRuns; i++ {
+		start, end := uint32(data[i*2]), uint32(data[i*2+1])
+		for curr := start; curr <= end; curr++ {
+			if !fn(base | curr) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+//go:noinline
 func rangeArray(data []uint16, base uint32, fn func(uint32) bool) bool {
 	for i := 0; i < len(data); i++ {
 		if !fn(base | uint32(data[i])) {

@@ -450,6 +450,23 @@ func TestRangeStopByContainerType(t *testing.T) {
 	}
 }
 
+func TestRangeBitmapMutation(t *testing.T) {
+	rb := New()
+	for i := 0; i < 5000; i++ {
+		rb.Set(uint32(i * 3))
+	}
+	clone := rb.Clone(nil)
+	before := rb.Count()
+
+	rb.Range(func(uint32) bool { return true })
+	rb.Set(60000)
+
+	assert.Equal(t, before+1, rb.Count())
+	assert.True(t, rb.Contains(60000))
+	assert.Equal(t, before, clone.Count())
+	assert.False(t, clone.Contains(60000))
+}
+
 func TestFilterSplit(t *testing.T) {
 	bm, _ := bitmapWith(&container{Type: typeRun, Size: 7, Data: []uint16{1, 4, 10, 12}})
 	clone := bm.Clone(nil)
