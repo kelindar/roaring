@@ -1,0 +1,5 @@
+./bitset.go
+./bitset_iter.go
+./pext.gen.go
+./popcnt.go
+./select.go

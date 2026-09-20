@@ -1,0 +1,16 @@
+./doc.go
+./ge_amd64.go
+./gemv.go
+./l2norm.go
+./scal.go
+./stubs_amd64.go
+./axpyinc_amd64.s
+./axpyincto_amd64.s
+./axpyunitary_amd64.s
+./axpyunitaryto_amd64.s
+./ddotinc_amd64.s
+./ddotunitary_amd64.s
+./dotinc_amd64.s
+./dotunitary_amd64.s
+./ge_amd64.s
+./sum_amd64.s

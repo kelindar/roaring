@@ -13,6 +13,7 @@ import (
 
 var (
 	sizes = []int{1e3, 1e6}
+	rng   = rand.New(rand.NewPCG(1, 2))
 )
 
 func main() {
@@ -22,8 +23,9 @@ func main() {
 		runRange(runner)
 		runCodec(runner)
 	}, bench.WithReference(),
-		bench.WithDuration(10*time.Millisecond),
-		bench.WithSamples(100),
+		bench.WithDuration(50*time.Millisecond),
+		bench.WithSamples(50),
+		bench.WithConfidence(95.0),
 	)
 }
 
@@ -58,6 +60,9 @@ func runOps(b *bench.B) {
 				b.Run(name,
 					func(i int) { op.ourFn(our, data[i%len(data)]) },
 					func(i int) { op.refFn(ref, data[i%len(data)]) })
+				if op.name != "has" {
+					runMutation(b, name+"clr", op.name, data)
+				}
 			}
 		}
 	}
@@ -159,7 +164,7 @@ func dataRand(size int) []uint32 {
 	data := make([]uint32, size)
 	maxVal := uint32(size)
 	for i := 0; i < size; i++ {
-		data[i] = uint32(rand.IntN(int(maxVal)))
+		data[i] = uint32(rng.IntN(int(maxVal)))
 	}
 	return data
 }
@@ -175,7 +180,7 @@ func dataSparse(size int) []uint32 {
 func dataDense(size int) []uint32 {
 	data := make([]uint32, size)
 	for i := 0; i < size; i++ {
-		data[i] = uint32(rand.IntN(size / 10))
+		data[i] = uint32(rng.IntN(size / 10))
 	}
 	return data
 }
@@ -185,7 +190,7 @@ func randomBitmaps(data []uint32) (*rb.Bitmap, *roaring.Bitmap) {
 	our := rb.New()
 	ref := roaring.NewBitmap()
 	for _, v := range data {
-		if rand.IntN(2) == 0 {
+		if rng.IntN(2) == 0 {
 			our.Set(v)
 			ref.Add(v)
 		}
@@ -209,19 +214,69 @@ func runCodec(b *bench.B) {
 	for _, shape := range shapes {
 		data := shape.gen(size)
 		bm := rb.New()
+		ref := roaring.NewBitmap()
 		for _, v := range data {
 			bm.Set(v)
+			ref.Add(v)
 		}
 
 		b.Run("write "+shape.name, func(_ int) {
 			var buf bytes.Buffer
 			_, _ = bm.WriteTo(&buf)
+		}, func(_ int) {
+			var buf bytes.Buffer
+			_, _ = ref.WriteTo(&buf)
 		})
 
 		encoded := bm.ToBytes()
+		refEncoded, err := ref.ToBytes()
+		if err != nil {
+			panic(err)
+		}
 		b.Run("read "+shape.name, func(_ int) {
 			bm2 := rb.New()
 			_, _ = bm2.ReadFrom(bytes.NewReader(encoded))
+		}, func(_ int) {
+			ref2 := roaring.NewBitmap()
+			_, _ = ref2.ReadFrom(bytes.NewReader(refEncoded))
 		})
 	}
+}
+
+// runMutation includes reset costs and visits the entire input on every iteration.
+func runMutation(b *bench.B, name, op string, data []uint32) {
+	our, ref := rb.New(), roaring.NewBitmap()
+	if op == "del" {
+		for _, value := range data {
+			our.Set(value)
+			ref.Add(value)
+		}
+	}
+	b.RunN(name, func(_ int) int {
+		if op == "set" {
+			dst := rb.New()
+			for _, value := range data {
+				dst.Set(value)
+			}
+		} else {
+			dst := our.Clone(nil)
+			for _, value := range data {
+				dst.Remove(value)
+			}
+		}
+		return len(data)
+	}, func(_ int) int {
+		if op == "set" {
+			dst := roaring.NewBitmap()
+			for _, value := range data {
+				dst.Add(value)
+			}
+		} else {
+			dst := ref.Clone()
+			for _, value := range data {
+				dst.Remove(value)
+			}
+		}
+		return len(data)
+	})
 }

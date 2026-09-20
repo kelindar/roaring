@@ -1,0 +1,74 @@
+name                 time/op      ops/s        allocs/op    vs prev            vs ref            
+-------------------- ------------ ------------ ------------ ------------------ ------------------
+set 1K (seq)         20.2 ns      49.6M        🟰 0          🟰 similar          ❌ -7%             
+set 1K (rnd)         32.5 ns      30.8M        🟰 0          🟰 similar          ❌ -9%             
+set 1K (sps)         21.4 ns      46.8M        🟰 0          🟰 similar          🟰 similar         
+set 1K (dns)         21.2 ns      47.3M        🟰 0          🟰 similar          ❌ -10%            
+set 1M (seq)         12.1 ns      82.3M        🟰 0          🟰 similar          ✅ +15%            
+set 1M (rnd)         20.8 ns      48.1M        🟰 0          🟰 similar          ✅ +7%             
+set 1M (sps)         31.4 ns      31.8M        🟰 0          🟰 similar          ✅ +22%            
+set 1M (dns)         13.2 ns      75.6M        🟰 0          🟰 similar          🟰 similar         
+has 1K (seq)         18.9 ns      52.9M        🟰 0          🟰 similar          ❌ -9%             
+has 1K (rnd)         26.4 ns      37.9M        🟰 0          🟰 similar          ❌ -9%             
+has 1K (sps)         15.0 ns      66.9M        🟰 0          🟰 similar          ✅ +31%            
+has 1K (dns)         19.6 ns      50.9M        🟰 0          🟰 similar          🟰 similar         
+has 1M (seq)         10.9 ns      92.1M        🟰 0          ❌ -10%             🟰 similar         
+has 1M (rnd)         20.1 ns      49.7M        🟰 0          🟰 similar          🟰 similar         
+has 1M (sps)         27.2 ns      36.8M        🟰 0          🟰 similar          ✅ +26%            
+has 1M (dns)         12.3 ns      81.2M        🟰 0          🟰 similar          🟰 similar         
+del 1K (seq)         7.3 ns       136.7M       🟰 0          🟰 similar          🟰 similar         
+del 1K (rnd)         7.4 ns       136.0M       🟰 0          🟰 similar          🟰 similar         
+del 1K (sps)         7.3 ns       136.1M       🟰 0          🟰 similar          🟰 similar         
+del 1K (dns)         7.3 ns       137.6M       🟰 0          🟰 similar          🟰 similar         
+del 1M (seq)         9.1 ns       110.2M       🟰 0          ❌ -19%             🟰 similar         
+del 1M (rnd)         28.4 ns      35.2M        🟰 0          ❌ -26%             🟰 similar         
+del 1M (sps)         7.2 ns       139.7M       🟰 0          🟰 similar          ✅ +66%            
+del 1M (dns)         38.8 ns      25.8M        🟰 0          ✅ +8%              ✅ +23%            
+and 1K (seq)         780.9 ns     1.3M         🟰 4          🟰 similar          ✅ +49%            
+and 1K (rnd)         583.9 ns     1.7M         🟰 4          🟰 similar          🟰 similar         
+and 1K (sps)         1.2 µs       848.8K       🟰 19         🟰 similar          🟰 similar         
+and 1K (dns)         167.6 ns     6.0M         🟰 4          🟰 similar          ❌ -34%            
+and 1M (seq)         28.5 µs      35.0K        ❌ 19         ❌ -16%             ✅ +23%            
+and 1M (rnd)         38.1 µs      26.3K        ❌ 19         ❌ -34%             ✅ +33%            
+and 1M (sps)         3.9 ms       254          🟰 15.3K      🟰 similar          ❌ -13%            
+and 1M (dns)         3.9 µs       259.7K       ❌ 5          ❌ -26%             ✅ +2.4x           
+or 1K (seq)          2.1 µs       481.1K       ❌ 16         ❌ -25%             🟰 similar         
+or 1K (rnd)          1.5 µs       675.8K       ✅ 16         ✅ +21%             ❌ -27%            
+or 1K (sps)          1.7 µs       577.3K       ✅ 26         🟰 similar          ✅ +22%            
+or 1K (dns)          333.8 ns     3.0M         ✅ 12         ✅ +33%             🟰 similar         
+or 1M (seq)          25.0 µs      40.1K        ❌ 21         🟰 similar          ✅ +25%            
+or 1M (rnd)          24.1 µs      41.5K        ✅ 21         🟰 similar          ✅ +24%            
+or 1M (sps)          3.9 ms       255          🟰 15.3K      🟰 similar          🟰 similar         
+or 1M (dns)          3.0 µs       338.5K       ✅ 7          🟰 similar          ✅ +245x           
+xor 1K (seq)         1.3 µs       751.4K       ✅ 14         ✅ +26%             ✅ +4.2x           
+xor 1K (rnd)         1.1 µs       911.7K       ✅ 14         🟰 similar          ❌ -24%            
+xor 1K (sps)         2.5 µs       395.3K       ✅ 26         ❌ -33%             🟰 similar         
+xor 1K (dns)         207.8 ns     4.8M         ❌ 7          ❌ -7%              ✅ +17x            
+xor 1M (seq)         25.6 µs      39.0K        ❌ 21         🟰 similar          ✅ +2.1x           
+xor 1M (rnd)         67.2 µs      14.9K        ❌ 22         ❌ -63%             🟰 similar         
+xor 1M (sps)         3.9 ms       255          🟰 15.3K      🟰 similar          🟰 similar         
+xor 1M (dns)         2.8 µs       352.8K       ❌ 7          🟰 similar          ✅ +9.0x           
+andnot 1K (seq)      1.0 µs       987.3K       🟰 4          🟰 similar          ✅ +8.9x           
+andnot 1K (rnd)      683.4 ns     1.5M         🟰 4          🟰 similar          ❌ -11%            
+andnot 1K (sps)      1.4 µs       720.3K       🟰 19         🟰 similar          🟰 similar         
+andnot 1K (dns)      160.7 ns     6.2M         🟰 4          🟰 similar          ✅ +25x            
+andnot 1M (seq)      26.6 µs      37.7K        ❌ 19         🟰 similar          ✅ +31%            
+andnot 1M (rnd)      24.9 µs      40.2K        ✅ 19         🟰 similar          ✅ +45%            
+andnot 1M (sps)      3.9 ms       254          🟰 15.3K      🟰 similar          ❌ -14%            
+andnot 1M (dns)      2.8 µs       357.3K       ✅ 5          🟰 similar          ✅ +10.4x          
+range 1K (seq)       637.4 ns     1.6M         🟰 0          ✅ +37%             🟰 similar         
+range 1K (rnd)       526.2 ns     1.9M         🟰 0          ✅ +32%             ❌ -15%            
+range 1K (sps)       673.6 ns     1.5M         🟰 0          ✅ +43%             ❌ -8%             
+range 1K (dns)       130.4 ns     7.7M         🟰 0          ✅ +44%             ❌ -15%            
+range 1M (seq)       2.3 ms       434          🟰 0          ✅ +37%             ❌ -32%            
+range 1M (rnd)       2.1 ms       475          🟰 0          ✅ +31%             ❌ -40%            
+range 1M (sps)       700.8 µs     1.4K         🟰 0          ✅ +42%             🟰 similar         
+range 1M (dns)       196.3 µs     5.1K         🟰 0          ✅ +35%             ✅ +58%            
+write seq            143.2 ns     7.0M         🟰 9          ✅ +100%                              
+read seq             220.1 ns     4.5M         🟰 13         ✅ +2.2x                              
+write rnd            2.7 µs       368.5K       ✅ 11         ✅ +2.2x                              
+read rnd             5.4 µs       185.1K       ✅ 13         ✅ +2.2x                              
+write sps            143.4 µs     7.0K         ✅ 4.6K       ✅ +2.1x                              
+read sps             145.8 µs     6.9K         ✅ 6.1K       ✅ +2.2x                              
+write dns            957.0 ns     1.0M         ✅ 7          ✅ +2.4x                              
+read dns             2.7 µs       368.9K       ✅ 8          🟰 similar                            

@@ -1,0 +1,3 @@
+name                 time/op      ops/s        allocs/op    vs prev            vs ref            
+-------------------- ------------ ------------ ------------ ------------------ ------------------
+read dns             1.4 µs       704.2K       🟰 5          ❔ uncertain        ❔ uncertain       

@@ -1,0 +1,10 @@
+name                 time/op      ops/s        allocs/op    vs prev            vs ref            
+-------------------- ------------ ------------ ------------ ------------------ ------------------
+set 1K (seq)         20.0 ns      50.0M        🟰 0          ❌ -14%             🟰 similar         
+set 1K (seq) clr     4.0 ns       251.6M       🟰 0          ❔ uncertain        ✅ +21%            
+set 1K (rnd)         31.4 ns      31.8M        🟰 0          ❌ -14%             🟰 similar         
+set 1K (rnd) clr     16.5 ns      60.6M        🟰 0          ❌ -20%             ❔ uncertain       
+set 1K (sps)         21.1 ns      47.5M        🟰 0          🟰 similar          🟰 similar         
+set 1K (sps) clr     4.7 ns       210.8M       🟰 0          ✅ +78%             ✅ +46%            
+set 1K (dns)         21.7 ns      46.0M        🟰 0          ❌ -16%             ❌ -9%             
+set 1K (dns) clr     9.1 ns       109.9M       🟰 0          ❔ uncertain        ✅ +10%            

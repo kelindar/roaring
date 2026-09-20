@@ -1,0 +1,10 @@
+name                 time/op      ops/s        allocs/op    vs prev            vs ref            
+-------------------- ------------ ------------ ------------ ------------------ ------------------
+del 1K (seq)         5.5 ns       181.3M       🟰 0          ❔ uncertain        ✅ +9%             
+del 1K (seq) clr     12.3 ns      81.5M        🟰 0          ✅ +15%             ✅ +27%            
+del 1K (rnd)         5.5 ns       182.4M       🟰 0          ❔ uncertain        ✅ +10%            
+del 1K (rnd) clr     10.5 ns      95.1M        🟰 0          ❔ uncertain        ❔ uncertain       
+del 1K (sps)         5.4 ns       184.6M       🟰 0          ❔ uncertain        ✅ +11%            
+del 1K (sps) clr     7.6 ns       131.7M       🟰 0          ✅ +14%             ✅ +35%            
+del 1K (dns)         5.4 ns       184.3M       🟰 0          ❔ uncertain        ❔ uncertain       
+del 1K (dns) clr     3.4 ns       296.9M       🟰 0          ❔ uncertain        ❔ uncertain       

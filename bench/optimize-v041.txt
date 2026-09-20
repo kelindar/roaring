@@ -1,0 +1,90 @@
+name                 time/op      ops/s        allocs/op    vs prev            vs ref            
+-------------------- ------------ ------------ ------------ ------------------ ------------------
+set 1K (seq)         24.5 ns      40.8M        0            ❔ new              ❔ uncertain       
+set 1K (seq) clr     7.7 ns       130.7M       0            ❔ new              ❔ uncertain       
+set 1K (rnd)         33.1 ns      30.3M        0            ❔ new              ❔ uncertain       
+set 1K (rnd) clr     19.3 ns      51.8M        0            ❔ new              ❔ uncertain       
+set 1K (sps)         22.3 ns      44.9M        0            ❔ new              ❔ uncertain       
+set 1K (sps) clr     10.5 ns      95.4M        0            ❔ new              ❔ uncertain       
+set 1K (dns)         20.3 ns      49.3M        0            ❔ new              ❔ uncertain       
+set 1K (dns) clr     10.0 ns      99.9M        0            ❔ new              ✅ +28%            
+set 1M (seq)         13.5 ns      74.2M        0            ❔ new              ✅ +19%            
+set 1M (seq) clr     5.1 ns       197.7M       0            ❔ new              ❔ uncertain       
+set 1M (rnd)         23.5 ns      42.6M        0            ❔ new              ✅ +17%            
+set 1M (rnd) clr     28.2 ns      35.5M        0            ❔ new              ❔ uncertain       
+set 1M (sps)         44.1 ns      22.7M        0            ❔ new              ✅ +15%            
+set 1M (sps) clr     13.2 ns      75.7M        0            ❔ new              ❔ uncertain       
+set 1M (dns)         17.4 ns      57.6M        0            ❔ new              ❔ uncertain       
+set 1M (dns) clr     9.3 ns       107.6M       0            ❔ new              ❔ uncertain       
+has 1K (seq)         21.5 ns      46.4M        0            ❔ new              ❔ uncertain       
+has 1K (rnd)         23.7 ns      42.3M        0            ❔ new              ❔ uncertain       
+has 1K (sps)         13.5 ns      73.9M        0            ❔ new              ✅ +35%            
+has 1K (dns)         15.2 ns      65.7M        0            ❔ new              ✅ +22%            
+has 1M (seq)         8.7 ns       115.6M       0            ❔ new              ❔ uncertain       
+has 1M (rnd)         19.1 ns      52.4M        0            ❔ new              ✅ +10%            
+has 1M (sps)         28.0 ns      35.7M        0            ❔ new              ✅ +26%            
+has 1M (dns)         11.1 ns      90.1M        0            ❔ new              ✅ +8%             
+del 1K (seq)         5.3 ns       190.0M       0            ❔ new              ✅ +16%            
+del 1K (seq) clr     12.1 ns      83.0M        0            ❔ new              ✅ +29%            
+del 1K (rnd)         5.2 ns       191.1M       0            ❔ new              ❔ uncertain       
+del 1K (rnd) clr     12.5 ns      80.1M        0            ❔ new              ✅ +16%            
+del 1K (sps)         5.3 ns       187.8M       0            ❔ new              ❔ uncertain       
+del 1K (sps) clr     7.3 ns       137.8M       0            ❔ new              ✅ +45%            
+del 1K (dns)         5.3 ns       187.0M       0            ❔ new              ✅ +16%            
+del 1K (dns) clr     3.8 ns       260.3M       0            ❔ new              ❔ uncertain       
+del 1M (seq)         5.4 ns       186.7M       0            ❔ new              ✅ +16%            
+del 1M (seq) clr     4.2 ns       239.7M       0            ❔ new              ✅ +2.1x           
+del 1M (rnd)         20.3 ns      49.3M        0            ❔ new              ✅ +15%            
+del 1M (rnd) clr     17.5 ns      57.1M        0            ❔ new              ✅ +57%            
+del 1M (sps)         5.3 ns       189.3M       0            ❔ new              ❔ uncertain       
+del 1M (sps) clr     6.8 ns       146.5M       0            ❔ new              ✅ +10.2x          
+del 1M (dns)         39.3 ns      25.4M        0            ❔ new              ✅ +34%            
+del 1M (dns) clr     18.0 ns      55.6M        0            ❔ new              ✅ +37%            
+and 1K (seq)         921.1 ns     1.1M         4            ❔ new              ❌ -12%            
+and 1K (rnd)         665.9 ns     1.5M         4            ❔ new              ❔ uncertain       
+and 1K (sps)         1.3 µs       784.8K       4            ❔ new              ❔ uncertain       
+and 1K (dns)         178.6 ns     5.6M         4            ❔ new              ❌ -35%            
+and 1M (seq)         20.8 µs      48.1K        4            ❔ new              ✅ +63%            
+and 1M (rnd)         20.6 µs      48.6K        4            ❔ new              ✅ +64%            
+and 1M (sps)         1.8 ms       545          4            ❔ new              ✅ +86%            
+and 1M (dns)         2.8 µs       358.8K       4            ❔ new              ✅ +2.8x           
+or 1K (seq)          1.4 µs       693.0K       5            ❔ new              ✅ +12%            
+or 1K (rnd)          1.1 µs       912.6K       5            ❔ new              ❔ uncertain       
+or 1K (sps)          1.6 µs       609.2K       5            ❔ new              ❔ uncertain       
+or 1K (dns)          441.6 ns     2.3M         5            ❔ new              ❔ uncertain       
+or 1M (seq)          50.3 µs      19.9K        4            ❔ new              ❔ uncertain       
+or 1M (rnd)          45.7 µs      21.9K        4            ❔ new              ❔ uncertain       
+or 1M (sps)          2.6 ms       387          5            ❔ new              ❔ uncertain       
+or 1M (dns)          2.9 µs       347.1K       4            ❔ new              ✅ +257x           
+xor 1K (seq)         1.4 µs       691.7K       5            ❔ new              ✅ +4.8x           
+xor 1K (rnd)         1.0 µs       998.0K       5            ❔ new              ❔ uncertain       
+xor 1K (sps)         1.6 µs       626.1K       5            ❔ new              ✅ +14%            
+xor 1K (dns)         228.3 ns     4.4M         5            ❔ new              ❔ uncertain       
+xor 1M (seq)         20.9 µs      47.8K        4            ❔ new              ✅ +2.7x           
+xor 1M (rnd)         20.7 µs      48.3K        4            ❔ new              ✅ +2.7x           
+xor 1M (sps)         2.2 ms       452          5            ❔ new              ❔ uncertain       
+xor 1M (dns)         2.5 µs       406.5K       4            ❔ new              ✅ +10.5x          
+andnot 1K (seq)      1.0 µs       998.2K       4            ❔ new              ❔ uncertain       
+andnot 1K (rnd)      773.3 ns     1.3M         4            ❔ new              ❔ uncertain       
+andnot 1K (sps)      1.4 µs       713.5K       4            ❔ new              ❔ uncertain       
+andnot 1K (dns)      162.2 ns     6.2M         4            ❔ new              ✅ +25x            
+andnot 1M (seq)      21.4 µs      46.7K        4            ❔ new              ✅ +70%            
+andnot 1M (rnd)      20.9 µs      47.8K        4            ❔ new              ✅ +83%            
+andnot 1M (sps)      2.0 ms       499          4            ❔ new              ✅ +71%            
+andnot 1M (dns)      2.4 µs       410.2K       4            ❔ new              ✅ +11x            
+range 1K (seq)       518.5 ns     1.9M         0            ❔ new              ❔ uncertain       
+range 1K (rnd)       396.3 ns     2.5M         0            ❔ new              🟰 similar         
+range 1K (sps)       570.8 ns     1.8M         0            ❔ new              ✅ +28%            
+range 1K (dns)       110.7 ns     9.0M         0            ❔ new              🟰 similar         
+range 1M (seq)       570.6 µs     1.8K         0            ❔ new              ✅ +2.9x           
+range 1M (rnd)       469.8 µs     2.1K         0            ❔ new              ✅ +2.7x           
+range 1M (sps)       556.4 µs     1.8K         0            ❔ new              ✅ +13%            
+range 1M (dns)       103.1 µs     9.7K         0            ❔ new              ✅ +3.0x           
+write seq            64.6 ns      15.5M        3            ❔ new              ❔ uncertain       
+read seq             92.2 ns      10.8M        6            ❔ new              ✅ +16x            
+write rnd            2.8 µs       353.4K       5            ❔ new              ❔ uncertain       
+read rnd             3.4 µs       297.6K       6            ❔ new              ❌ -18%            
+write sps            84.6 µs      11.8K        15           ❔ new              ❔ uncertain       
+read sps             76.6 µs      13.1K        1.5K         ❔ new              ❔ uncertain       
+write dns            1.0 µs       966.5K       4            ❔ new              ❔ uncertain       
+read dns             1.7 µs       580.8K       5            ❔ new              ❌ -19%            

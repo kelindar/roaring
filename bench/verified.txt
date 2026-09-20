@@ -1,0 +1,90 @@
+name                 time/op      ops/s        allocs/op    vs prev            vs ref            
+-------------------- ------------ ------------ ------------ ------------------ ------------------
+set 1K (seq)         22.5 ns      44.5M        🟰 0          ❌ -10%             ❌ -8%             
+set 1K (seq) batch   4.8 ns       206.8M       🟰 0          🟰 similar          🟰 similar         
+set 1K (rnd)         29.3 ns      34.1M        🟰 0          🟰 similar          ✅ +9%             
+set 1K (rnd) batch   14.9 ns      67.0M        🟰 0          ✅ +25%             🟰 similar         
+set 1K (sps)         19.9 ns      50.1M        🟰 0          🟰 similar          ✅ +9%             
+set 1K (sps) batch   6.1 ns       164.9M       🟰 0          🟰 similar          ✅ +15%            
+set 1K (dns)         18.9 ns      52.8M        🟰 0          🟰 similar          ✅ +8%             
+set 1K (dns) batch   9.7 ns       102.7M       🟰 0          🟰 similar          ✅ +40%            
+set 1M (seq)         13.1 ns      76.2M        🟰 0          ❌ -13%             🟰 similar         
+set 1M (seq) batch   3.6 ns       278.3M       🟰 0          🟰 similar          ✅ +11%            
+set 1M (rnd)         19.7 ns      50.9M        🟰 0          🟰 similar          ✅ +15%            
+set 1M (rnd) batch   22.1 ns      45.2M        🟰 0          ❌ -11%             🟰 similar         
+set 1M (sps)         36.3 ns      27.6M        🟰 0          ❌ -15%             🟰 similar         
+set 1M (sps) batch   7.8 ns       128.2M       🟰 0          ❌ -27%             🟰 similar         
+set 1M (dns)         12.3 ns      81.0M        🟰 0          🟰 similar          ✅ +11%            
+set 1M (dns) batch   7.2 ns       139.0M       🟰 0          🟰 similar          🟰 similar         
+has 1K (seq)         17.9 ns      55.8M        🟰 0          🟰 similar          🟰 similar         
+has 1K (rnd)         23.8 ns      42.1M        🟰 0          🟰 similar          🟰 similar         
+has 1K (sps)         14.4 ns      69.6M        🟰 0          ❌ -8%              ✅ +29%            
+has 1K (dns)         15.5 ns      64.5M        🟰 0          🟰 similar          ✅ +21%            
+has 1M (seq)         9.9 ns       101.3M       🟰 0          🟰 similar          ✅ +14%            
+has 1M (rnd)         19.3 ns      51.7M        🟰 0          🟰 similar          ✅ +10%            
+has 1M (sps)         28.7 ns      34.9M        🟰 0          🟰 similar          ✅ +24%            
+has 1M (dns)         11.8 ns      84.7M        🟰 0          🟰 similar          ✅ +8%             
+del 1K (seq)         6.4 ns       155.5M       🟰 0          🟰 similar          ✅ +19%            
+del 1K (seq) batch   11.8 ns      84.6M        ✅ 0          🟰 similar          ✅ +32%            
+del 1K (rnd)         6.5 ns       154.8M       🟰 0          🟰 similar          ✅ +20%            
+del 1K (rnd) batch   12.5 ns      80.3M        ✅ 0          🟰 similar          ✅ +19%            
+del 1K (sps)         6.4 ns       156.7M       🟰 0          ❌ -7%              ✅ +19%            
+del 1K (sps) batch   6.9 ns       145.7M       ✅ 0          ✅ +10%             ✅ +52%            
+del 1K (dns)         6.4 ns       155.8M       🟰 0          🟰 similar          ✅ +16%            
+del 1K (dns) batch   3.8 ns       264.1M       ✅ 0          ✅ +22%             ✅ +50%            
+del 1M (seq)         6.5 ns       154.1M       🟰 0          🟰 similar          ✅ +17%            
+del 1M (seq) batch   4.2 ns       240.5M       ✅ 0          ✅ +9%              ✅ +2.1x           
+del 1M (rnd)         21.1 ns      47.4M        🟰 0          🟰 similar          ✅ +12%            
+del 1M (rnd) batch   17.6 ns      56.9M        ✅ 0          🟰 similar          ✅ +57%            
+del 1M (sps)         6.5 ns       153.7M       🟰 0          🟰 similar          ✅ +91%            
+del 1M (sps) batch   6.8 ns       147.1M       ✅ 0          🟰 similar          ✅ +10.3x          
+del 1M (dns)         38.6 ns      25.9M        🟰 0          🟰 similar          ✅ +34%            
+del 1M (dns) batch   17.8 ns      56.3M        ✅ 0          🟰 similar          ✅ +37%            
+and 1K (seq)         786.6 ns     1.3M         🟰 4          ✅ +21%             🟰 similar         
+and 1K (rnd)         587.1 ns     1.7M         🟰 4          ✅ +16%             ❌ -7%             
+and 1K (sps)         1.1 µs       900.2K       🟰 4          ✅ +13%             ✅ +10%            
+and 1K (dns)         167.2 ns     6.0M         🟰 4          🟰 similar          ❌ -32%            
+and 1M (seq)         20.3 µs      49.4K        ✅ 4          🟰 similar          ✅ +58%            
+and 1M (rnd)         20.6 µs      48.6K        ❌ 4          🟰 similar          ✅ +59%            
+and 1M (sps)         3.5 ms       285          🟰 4          🟰 similar          🟰 similar         
+and 1M (dns)         2.3 µs       434.8K       ❌ 4          ✅ +33%             ✅ +3.2x           
+or 1K (seq)          1.2 µs       802.7K       ❌ 5          ✅ +21%             ✅ +15%            
+or 1K (rnd)          910.5 ns     1.1M         🟰 5          ✅ +36%             ✅ +18%            
+or 1K (sps)          1.5 µs       665.8K       🟰 5          🟰 similar          ✅ +41%            
+or 1K (dns)          219.6 ns     4.6M         ✅ 5          🟰 similar          ✅ +2.2x           
+or 1M (seq)          31.1 µs      32.1K        🟰 4          ❌ -36%             ✅ +43%            
+or 1M (rnd)          24.0 µs      41.7K        🟰 4          ❌ -18%             ✅ +61%            
+or 1M (sps)          3.8 ms       262          🟰 5          🟰 similar          🟰 similar         
+or 1M (dns)          2.6 µs       383.6K       ❌ 4          🟰 similar          ✅ +289x           
+xor 1K (seq)         1.4 µs       694.7K       ❌ 7          🟰 similar          ✅ +5.2x           
+xor 1K (rnd)         907.4 ns     1.1M         ✅ 7          ✅ +9%              ❌ -12%            
+xor 1K (sps)         1.6 µs       639.1K       🟰 7          ✅ +9%              ✅ +12%            
+xor 1K (dns)         232.1 ns     4.3M         ✅ 7          🟰 similar          ✅ +15x            
+xor 1M (seq)         20.6 µs      48.5K        ✅ 6          🟰 similar          ✅ +2.7x           
+xor 1M (rnd)         19.6 µs      51.0K        ✅ 6          🟰 similar          ✅ +2.7x           
+xor 1M (sps)         3.8 ms       260          🟰 7          🟰 similar          🟰 similar         
+xor 1M (dns)         3.5 µs       283.4K       ✅ 6          ❌ -33%             ✅ +10.4x          
+andnot 1K (seq)      1.1 µs       934.2K       🟰 4          ❌ -15%             🟰 similar         
+andnot 1K (rnd)      959.4 ns     1.0M         🟰 4          ❌ -25%             🟰 similar         
+andnot 1K (sps)      1.9 µs       535.5K       🟰 4          ❌ -29%             🟰 similar         
+andnot 1K (dns)      185.2 ns     5.4M         🟰 4          ❌ -17%             ✅ +26x            
+andnot 1M (seq)      20.8 µs      48.0K        🟰 4          🟰 similar          ✅ +64%            
+andnot 1M (rnd)      20.3 µs      49.3K        🟰 4          🟰 similar          ✅ +81%            
+andnot 1M (sps)      3.5 ms       282          🟰 4          🟰 similar          🟰 similar         
+andnot 1M (dns)      2.3 µs       439.5K       ❌ 4          🟰 similar          ✅ +12x            
+range 1K (seq)       521.1 ns     1.9M         🟰 0          ✅ +10%             🟰 similar         
+range 1K (rnd)       393.1 ns     2.5M         🟰 0          ✅ +12%             🟰 similar         
+range 1K (sps)       554.1 ns     1.8M         🟰 0          ✅ +9%              ✅ +29%            
+range 1K (dns)       109.9 ns     9.1M         🟰 0          ✅ +8%              🟰 similar         
+range 1M (seq)       564.3 µs     1.8K         🟰 0          🟰 similar          ✅ +2.7x           
+range 1M (rnd)       465.9 µs     2.1K         🟰 0          🟰 similar          ✅ +2.7x           
+range 1M (sps)       556.4 µs     1.8K         🟰 0          🟰 similar          ✅ +13%            
+range 1M (dns)       102.0 µs     9.8K         🟰 0          🟰 similar          ✅ +3.0x           
+write seq            61.7 ns      16.2M        🟰 3          🟰 similar          ✅ +16x            
+read seq             90.1 ns      11.1M        🟰 6          🟰 similar          ✅ +16x            
+write rnd            3.6 µs       280.7K       ✅ 5          ❌ -29%             🟰 similar         
+read rnd             3.6 µs       279.7K       ✅ 6          ❌ -15%             ❌ -16%            
+write sps            98.8 µs      10.1K        🟰 15         ❌ -17%             🟰 similar         
+read sps             84.7 µs      11.8K        ❌ 1.5K       🟰 similar          🟰 similar         
+write dns            936.2 ns     1.1M         ❌ 4          🟰 similar          🟰 similar         
+read dns             1.6 µs       629.5K       ✅ 5          🟰 similar          🟰 similar         

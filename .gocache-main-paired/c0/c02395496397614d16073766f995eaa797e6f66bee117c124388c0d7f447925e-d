@@ -1,0 +1,5 @@
+./doc.go
+./math.go
+./signbit.go
+./sqrt_amd64.go
+./sqrt_amd64.s

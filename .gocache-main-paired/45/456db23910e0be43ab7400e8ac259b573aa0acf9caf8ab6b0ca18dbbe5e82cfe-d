@@ -1,0 +1,13 @@
+./conj.go
+./doc.go
+./scal.go
+./stubs.go
+./stubs_amd64.go
+./axpyinc_amd64.s
+./axpyincto_amd64.s
+./axpyunitary_amd64.s
+./axpyunitaryto_amd64.s
+./dotcinc_amd64.s
+./dotcunitary_amd64.s
+./dotuinc_amd64.s
+./dotuunitary_amd64.s
