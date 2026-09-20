@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	rb "github.com/kelindar/roaring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
