@@ -23,8 +23,9 @@ func main() {
 		runRange(runner)
 		runCodec(runner)
 	}, bench.WithReference(),
-		bench.WithDuration(10*time.Millisecond),
-		bench.WithSamples(100),
+		bench.WithDuration(50*time.Millisecond),
+		bench.WithSamples(50),
+		bench.WithConfidence(95.0),
 	)
 }
 

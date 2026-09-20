@@ -39,6 +39,24 @@ func (c *container) fork() {
 	}
 }
 
+// set sets a value in the container and returns true if the value was added (didn't exist before)
+func (c *container) set(value uint16) (ok bool) {
+	c.fork()
+	switch c.Type {
+	case typeArray:
+		if ok = c.arrSet(value); ok && c.Size > arrMinSize {
+			c.optimize()
+		}
+	case typeBitmap:
+		ok = c.bmpSet(value)
+	case typeRun:
+		if ok = c.runSet(value); ok {
+			c.tryOptimize()
+		}
+	}
+	return
+}
+
 // isEmpty returns true if the container has no elements
 func (c *container) isEmpty() bool {
 	return c.Size == 0
@@ -59,7 +77,7 @@ func (c *container) optimize() {
 
 // tryOptimize optimizes the container periodically
 func (c *container) tryOptimize() {
-	if c.Call++; c.Call%optimizeEvery == 0 {
+	if c.Call++; c.Call&(optimizeEvery-1) == 0 {
 		c.optimize()
 	}
 }

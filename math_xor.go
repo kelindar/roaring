@@ -147,35 +147,52 @@ func (rb *Bitmap) arrXorArr(c1, c2 *container) bool {
 			i += 1 - greater
 			j += 1 - less
 		}
+		out = append(out, a[i:]...)
+		out = append(out, b[j:]...)
 	} else {
-		for i < len(a) && j < len(b) {
-			av, bv := a[i], b[j]
-			switch {
-			case av == bv:
-				// Same element in both - exclude from XOR
-				i++
-				j++
-			case av < bv:
-				// Only in first array
-				out = append(out, av)
-				i++
-			default: // av > bv
-				// Only in second array
-				out = append(out, bv)
-				j++
+		sum := len(a) + len(b)
+		// Append when scratch is nearly large enough; sparse XOR often removes most values.
+		if cap(out)+16 >= sum {
+			for i < len(a) && j < len(b) {
+				av, bv := a[i], b[j]
+				if av < bv {
+					out = append(out, av)
+					i++
+				} else if av == bv {
+					i++
+					j++
+				} else {
+					out = append(out, bv)
+					j++
+				}
 			}
+			out = append(out, a[i:]...)
+			out = append(out, b[j:]...)
+		} else {
+			if cap(out) < sum {
+				out = make([]uint16, 0, sum)
+			}
+			out = out[:sum]
+			k := 0
+			for i < len(a) && j < len(b) {
+				av, bv := a[i], b[j]
+				if av < bv {
+					out[k] = av
+					k++
+					i++
+				} else if av == bv {
+					i++
+					j++
+				} else {
+					out[k] = bv
+					k++
+					j++
+				}
+			}
+			k += copy(out[k:], a[i:])
+			k += copy(out[k:], b[j:])
+			out = out[:k]
 		}
-	}
-
-	// Add remaining elements from first array
-	for i < len(a) {
-		out = append(out, a[i])
-		i++
-	}
-	// Add remaining elements from second array
-	for j < len(b) {
-		out = append(out, b[j])
-		j++
 	}
 
 	rb.scratch = c1.Data[:0]
@@ -304,26 +321,94 @@ func (rb *Bitmap) runXorBmp(c1, c2 *container) bool {
 
 // runXorRun performs XOR between two run containers
 func (rb *Bitmap) runXorRun(c1, c2 *container) bool {
-	// For simplicity, convert both to arrays, XOR, then optimize
-	c1.runToArray()
+	a, b := c1.Data, c2.Data
+	out := rb.scratch[:0]
+	if cap(out) < len(a)+len(b) {
+		out = make([]uint16, 0, len(a)+len(b))
+	}
+	size := uint32(0)
+	appendRun := func(start, end uint32) {
+		if start > end {
+			return
+		}
+		if n := len(out); n >= 2 && uint32(out[n-1])+1 >= start {
+			if end > uint32(out[n-1]) {
+				size += end - uint32(out[n-1])
+				out[n-1] = uint16(end)
+			}
+			return
+		}
+		out = append(out, uint16(start), uint16(end))
+		size += end - start + 1
+	}
 
-	// Create temporary array from second run container
-	runs := c2.Data
-	var tempArray []uint16
-	for i := 0; i < len(runs); i += 2 {
-		start, end := uint32(runs[i]), uint32(runs[i+1])
-		for v := start; v <= end; v++ {
-			tempArray = append(tempArray, uint16(v))
+	i, j := 0, 0
+	var as, ae, bs, be uint32
+	haveA, haveB := false, false
+	for {
+		if !haveA {
+			if i >= len(a) {
+				if haveB {
+					appendRun(bs, be)
+					j += 2
+				}
+				for ; j < len(b); j += 2 {
+					appendRun(uint32(b[j]), uint32(b[j+1]))
+				}
+				break
+			}
+			as, ae = uint32(a[i]), uint32(a[i+1])
+			haveA = true
+		}
+		if !haveB {
+			if j >= len(b) {
+				appendRun(as, ae)
+				i += 2
+				for ; i < len(a); i += 2 {
+					appendRun(uint32(a[i]), uint32(a[i+1]))
+				}
+				break
+			}
+			bs, be = uint32(b[j]), uint32(b[j+1])
+			haveB = true
+		}
+		if ae < bs {
+			appendRun(as, ae)
+			i += 2
+			haveA = false
+			continue
+		}
+		if be < as {
+			appendRun(bs, be)
+			j += 2
+			haveB = false
+			continue
+		}
+		if as < bs {
+			appendRun(as, bs-1)
+		}
+		if bs < as {
+			appendRun(bs, as-1)
+		}
+		if ae <= be {
+			i += 2
+			haveA = false
+			if ae == be {
+				j += 2
+				haveB = false
+			} else {
+				bs = ae + 1
+			}
+		} else {
+			j += 2
+			haveB = false
+			as = be + 1
 		}
 	}
 
-	temp := &container{
-		Type: typeArray,
-		Data: tempArray,
-		Size: uint32(len(tempArray)),
-	}
-
-	result := rb.arrXorArr(c1, temp)
+	rb.scratch = c1.Data[:0]
+	c1.Data = out
+	c1.Size = size
 	c1.optimize()
-	return result
+	return c1.Size > 0
 }

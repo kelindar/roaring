@@ -18,8 +18,9 @@ func New() *Bitmap {
 // Set sets the bit x in the bitmap and grows it if necessary.
 func (rb *Bitmap) Set(x uint32) {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	idx, exists := 0, len(rb.index) > 0
-	if !exists || rb.index[0] != hi {
+	idx := len(rb.index) - 1
+	exists := idx >= 0 && rb.index[idx] == hi
+	if !exists {
 		idx, exists = find16(rb.index, hi)
 	}
 	if !exists {
@@ -29,20 +30,7 @@ func (rb *Bitmap) Set(x uint32) {
 			Data: make([]uint16, 0, 64),
 		})
 	}
-	c := &rb.containers[idx]
-	c.fork()
-	var changed bool
-	switch c.Type {
-	case typeArray:
-		changed = c.arrSet(lo)
-	case typeBitmap:
-		changed = c.bmpSet(lo)
-	case typeRun:
-		changed = c.runSet(lo)
-	}
-	if changed {
-		c.tryOptimize()
-	}
+	rb.containers[idx].set(lo)
 }
 
 // Remove removes the bit x from the bitmap
@@ -51,9 +39,10 @@ func (rb *Bitmap) Remove(x uint32) {
 		return
 	}
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	idx, exists := 0, len(rb.index) > 0
-	if !exists || rb.index[0] != hi {
-		idx, exists = find16(rb.index, hi)
+	idx := len(rb.index) - 1
+	exists := rb.index[idx] == hi
+	if !exists {
+		idx, exists = find16Delete(rb.index, hi)
 	}
 	if !exists {
 		return
@@ -81,8 +70,9 @@ func (rb *Bitmap) Remove(x uint32) {
 // Contains checks whether a value is contained in the bitmap
 func (rb *Bitmap) Contains(x uint32) bool {
 	hi, lo := uint16(x>>16), uint16(x&0xFFFF)
-	idx, exists := 0, len(rb.index) > 0
-	if !exists || rb.index[0] != hi {
+	idx := len(rb.index) - 1
+	exists := idx >= 0 && rb.index[idx] == hi
+	if !exists {
 		idx, exists = find16(rb.index, hi)
 	}
 	if !exists {
@@ -322,36 +312,52 @@ func clearContainerTail(containers []container, keep int) {
 //
 //go:nosplit
 func find16(a []uint16, target uint16) (index int, found bool) {
+	low, high := 0, len(a)-1
+	for low+16 <= high {
+		middle := int(uint32(low+high) >> 1)
+		value := a[middle]
+		switch {
+		case value < target:
+			low = middle + 1
+		case value > target:
+			high = middle - 1
+		default:
+			return middle, true
+		}
+	}
+	for ; low <= high; low++ {
+		if value := a[low]; value >= target {
+			return low, value == target
+		}
+	}
+	return low, false
+}
+
+// find16Delete searches with the deletion-oriented unrolled tail.
+func find16Delete(a []uint16, target uint16) (index int, found bool) {
 	n := len(a)
 	switch {
 	case n == 0:
 		return 0, false
 	case target <= a[0]:
 		return 0, target == a[0]
-	case target >= a[n-1]:
-		if target == a[n-1] {
-			return n - 1, true
-		}
+	case target > a[n-1]:
 		return n, false
 	}
 
-	// binary phase: shrink search window to ≤16, returning exact hits early.
-	lo, hi := 1, n
+	lo, hi := 0, n
 	for hi-lo > 16 {
 		mid := (lo + hi) >> 1
-		value := a[mid]
-		if value < target {
+		switch {
+		case a[mid] < target:
 			lo = mid + 1
-		} else if value > target {
+		case a[mid] >= target:
 			hi = mid
-		} else {
-			return mid, true
 		}
 	}
 
-	// linear phase inside one cache line
 	i := lo
-	for ; i+3 < hi; i += 4 { // 4-way unroll
+	for ; i+3 < hi; i += 4 {
 		switch {
 		case a[i] >= target:
 			return i, a[i] == target
@@ -363,14 +369,10 @@ func find16(a []uint16, target uint16) (index int, found bool) {
 			return i + 3, a[i+3] == target
 		}
 	}
-
-	// 0-3 leftovers
 	for ; i < hi; i++ {
 		if a[i] >= target {
 			return i, a[i] == target
 		}
 	}
-
-	// hi is now the first position that may still satisfy ≥ target
 	return hi, hi < n && a[hi] == target
 }

@@ -13,10 +13,8 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 
 		switch c.Type {
 		case typeArray:
-			for _, value := range c.Data {
-				if !fn(base | uint32(value)) {
-					return
-				}
+			if !rangeArray(c.Data, base, fn) {
+				return
 			}
 		case typeBitmap:
 			for j, word := range c.bmp() {
@@ -40,6 +38,15 @@ func (rb *Bitmap) Range(fn func(x uint32) bool) {
 			}
 		}
 	}
+}
+
+func rangeArray(data []uint16, base uint32, fn func(uint32) bool) bool {
+	for i := 0; i < len(data); i++ {
+		if !fn(base | uint32(data[i])) {
+			return false
+		}
+	}
+	return true
 }
 
 // Filter iterates over the bitmap elements and calls a predicate provided for each

@@ -76,15 +76,14 @@ func (rb *Bitmap) ctrAndNot(c1, c2 *container) bool {
 // arrAndNotArr performs AND NOT between two array containers
 func (rb *Bitmap) arrAndNotArr(c1, c2 *container) bool {
 	a, b := c1.Data, c2.Data
-	out := a[:0]
-	i, j := 0, 0
+	i, j, k := 0, 0, 0
 
 	if len(rb.index) >= branchlessAt {
 		for i < len(a) && j < len(b) {
 			av, bv := uint32(a[i]), uint32(b[j])
 			less, greater := int((av-bv)>>31), int((bv-av)>>31)
-			out = append(out, uint16(av))
-			out = out[:len(out)-1+less]
+			a[k] = uint16(av)
+			k += less
 			i += 1 - greater
 			j += 1 - less
 		}
@@ -93,28 +92,22 @@ func (rb *Bitmap) arrAndNotArr(c1, c2 *container) bool {
 			av, bv := a[i], b[j]
 			switch {
 			case av == bv:
-				// Element in both - exclude from result
 				i++
 				j++
 			case av < bv:
-				// Only in first array - keep it
-				out = append(out, av)
+				a[k] = av
+				k++
 				i++
-			default: // av > bv
-				// Only in second array - skip it
+			default:
 				j++
 			}
 		}
 	}
 
-	// Add remaining elements from first array
-	for i < len(a) {
-		out = append(out, a[i])
-		i++
-	}
+	k += copy(a[k:], a[i:])
 
-	c1.Data = out
-	c1.Size = uint32(len(out))
+	c1.Data = a[:k]
+	c1.Size = uint32(k)
 	return c1.Size > 0
 }
 

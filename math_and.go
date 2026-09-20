@@ -88,18 +88,48 @@ func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 			j += 1 - less
 		}
 	} else {
-		for i < len(a) && j < len(b) {
-			av, bv := a[i], b[j]
-			switch {
-			case av == bv:
-				a[k] = av
-				k++
-				i++
-				j++
-			case av < bv:
-				i++
-			default: // av > bv
-				j++
+		if len(a) > 0 && len(b) > 0 {
+			av, bv := a[0], b[0]
+		main:
+			for {
+				if bv < av {
+					for {
+						j++
+						if j == len(b) {
+							break main
+						}
+						bv = b[j]
+						if bv >= av {
+							break
+						}
+					}
+				}
+				if av < bv {
+					for {
+						i++
+						if i == len(a) {
+							break main
+						}
+						av = a[i]
+						if av >= bv {
+							break
+						}
+					}
+				}
+				if av == bv {
+					a[k] = av
+					k++
+					i++
+					if i == len(a) {
+						break
+					}
+					av = a[i]
+					j++
+					if j == len(b) {
+						break
+					}
+					bv = b[j]
+				}
 			}
 		}
 	}

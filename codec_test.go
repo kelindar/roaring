@@ -137,6 +137,16 @@ func TestCodec_SparseRandom(t *testing.T) {
 	bitmapsEqual(t, rb, rb2)
 }
 
+func TestCodecIsolation(t *testing.T) {
+	original := bitmapOf(1, 2, 1<<16|3, 2<<16|5)
+	decoded := FromBytes(original.ToBytes())
+	decoded.Set(4)
+	decoded.Set(1<<16 | 6)
+
+	want := bitmapOf(1, 2, 4, 1<<16|3, 1<<16|6, 2<<16|5)
+	bitmapsEqual(t, want, decoded)
+}
+
 func TestCodec_BigEndian(t *testing.T) {
 	data := []uint16{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	assert.NoError(t, writeUint16s(&bytes.Buffer{}, true, nil))
