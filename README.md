@@ -3,7 +3,6 @@
 <br>
 <img src="https://img.shields.io/github/go-mod/go-version/kelindar/roaring" alt="Go Version">
 <a href="https://pkg.go.dev/github.com/kelindar/roaring"><img src="https://pkg.go.dev/badge/github.com/kelindar/roaring" alt="PkgGoDev"></a>
-<a href="https://goreportcard.com/report/github.com/kelindar/roaring"><img src="https://goreportcard.com/badge/github.com/kelindar/roaring" alt="Go Report Card"></a>
 <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
 <a href="https://coveralls.io/github/kelindar/roaring"><img src="https://coveralls.io/repos/github/kelindar/roaring/badge.svg" alt="Coverage"></a>
 </p>
@@ -155,4 +154,4 @@ range 1M (dns)       218.2 µs     4.6K         0             ✅ +39%
 
 ## About
 
-Bench is MIT licensed and maintained by [@kelindar](https://github.com/kelindar). PRs and issues welcome! 
+Bench is MIT licensed and maintained by [@kelindar](https://github.com/kelindar). PRs and issues welcome!
