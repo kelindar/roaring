@@ -1,4 +1,0 @@
-./simd.go
-./simd_avx2_amd64.go
-./simd_funcs.go
-./simd_avx2_amd64.s

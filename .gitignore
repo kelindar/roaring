@@ -1,7 +1,6 @@
 *.prof
 *.test
 *.exe
-GEMINI.md
 *.gob
 bench.json
 /bench/*.txt

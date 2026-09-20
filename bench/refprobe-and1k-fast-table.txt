@@ -1,6 +1,0 @@
-name                 time/op      ops/s        allocs/op    vs prev            vs ref            
--------------------- ------------ ------------ ------------ ------------------ ------------------
-and 1K (seq)         833.3 ns     1.2M         🟰 4          ❔ uncertain        ❔ uncertain       
-and 1K (rnd)         596.1 ns     1.7M         🟰 4          ❔ uncertain        ❔ uncertain       
-and 1K (sps)         1.2 µs       856.6K       ✅ 4          ❔ uncertain        ❔ uncertain       
-and 1K (dns)         96.9 ns      10.3M        🟰 4          ❔ uncertain        ❔ uncertain       

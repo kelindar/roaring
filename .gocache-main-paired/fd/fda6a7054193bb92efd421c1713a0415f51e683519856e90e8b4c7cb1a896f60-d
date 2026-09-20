@@ -1,9 +1,0 @@
-./bitmap.go
-./bitmap_amd64.go
-./codec.go
-./range.go
-./simd_avx.go
-./simd_avx512.go
-./simd_generic.go
-./simd_avx.s
-./simd_avx512.s
