@@ -40,6 +40,27 @@ func TestRange(t *testing.T) {
 	}
 }
 
+func TestRangeBitmap(t *testing.T) {
+	c := container{
+		Type: typeBitmap,
+		Size: 1 << 16,
+		Data: make([]uint16, bitmapSize),
+	}
+	for i := range c.Data {
+		c.Data[i] = ^uint16(0)
+	}
+
+	rb := New()
+	rb.ctrAdd(0, 0, &c)
+	count := 0
+	rb.Range(func(uint32) bool {
+		count++
+		return true
+	})
+
+	assert.Equal(t, 1<<16, count)
+}
+
 func TestFilter(t *testing.T) {
 	t.Run("filter_even_numbers", func(t *testing.T) {
 		rb := New()
@@ -237,7 +258,7 @@ func TestFilter(t *testing.T) {
 	})
 }
 
-func TestRangeAndFilterConsistency(t *testing.T) {
+func TestRangeFilter(t *testing.T) {
 	t.Run("range_after_filter", func(t *testing.T) {
 		rb := New()
 
@@ -408,7 +429,7 @@ func TestEdgeCases(t *testing.T) {
 	})
 }
 
-func TestRangeStop(t *testing.T) {
+func TestRangeCutoff(t *testing.T) {
 	rb := New()
 	rb.ctrAdd(0, 0, newBmpPermutations())
 
@@ -427,7 +448,7 @@ func TestRangeStop(t *testing.T) {
 	assert.Equal(t, 63, count)
 }
 
-func TestRangeStopByContainerType(t *testing.T) {
+func TestRangeStop(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		c    *container
@@ -448,6 +469,23 @@ func TestRangeStopByContainerType(t *testing.T) {
 			assert.Equal(t, []uint32{1, 2}, got)
 		})
 	}
+}
+
+func TestRangeBitmapMutation(t *testing.T) {
+	rb := New()
+	for i := 0; i < 5000; i++ {
+		rb.Set(uint32(i * 3))
+	}
+	clone := rb.Clone(nil)
+	before := rb.Count()
+
+	rb.Range(func(uint32) bool { return true })
+	rb.Set(60000)
+
+	assert.Equal(t, before+1, rb.Count())
+	assert.True(t, rb.Contains(60000))
+	assert.Equal(t, before, clone.Count())
+	assert.False(t, clone.Contains(60000))
 }
 
 func TestFilterSplit(t *testing.T) {

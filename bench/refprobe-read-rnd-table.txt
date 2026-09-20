@@ -1,3 +1,0 @@
-name                 time/op      ops/s        allocs/op    vs prev            vs ref            
--------------------- ------------ ------------ ------------ ------------------ ------------------
-read rnd             2.9 µs       345.2K       🟰 6          ❔ uncertain        ❔ uncertain       

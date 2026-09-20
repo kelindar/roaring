@@ -12,6 +12,25 @@ func (rb *Bitmap) and(other *Bitmap) {
 	case len(rb.containers) == 0:
 		return
 	}
+	if len(rb.containers) == 1 && len(other.containers) == 1 {
+		if rb.index[0] != other.index[0] {
+			rb.Clear()
+			return
+		}
+		c1, c2 := &rb.containers[0], &other.containers[0]
+		var keep bool
+		switch {
+		case c1.Type == typeArray && c2.Type == typeArray:
+			c1.fork()
+			keep = rb.arrAndArr(c1, c2)
+		default:
+			keep = rb.ctrAnd(c1, c2)
+		}
+		if !keep {
+			rb.Clear()
+		}
+		return
+	}
 
 	write, idx := 0, 0
 	for read := range rb.containers {
@@ -89,16 +108,17 @@ func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 		}
 	} else {
 		if len(a) > 0 && len(b) > 0 {
-			av, bv := a[0], b[0]
+			left, right := a, b
+			av, bv := left[0], right[0]
 		main:
 			for {
 				if bv < av {
 					for {
-						j++
-						if j == len(b) {
+						if len(right) <= 1 {
 							break main
 						}
-						bv = b[j]
+						right = right[1:]
+						bv = right[0]
 						if bv >= av {
 							break
 						}
@@ -106,29 +126,28 @@ func (rb *Bitmap) arrAndArr(c1, c2 *container) bool {
 				}
 				if av < bv {
 					for {
-						i++
-						if i == len(a) {
+						if len(left) <= 1 {
 							break main
 						}
-						av = a[i]
+						left = left[1:]
+						av = left[0]
 						if av >= bv {
 							break
 						}
 					}
-				}
-				if av == bv {
+				} else {
 					a[k] = av
 					k++
-					i++
-					if i == len(a) {
+					if len(left) <= 1 {
 						break
 					}
-					av = a[i]
-					j++
-					if j == len(b) {
+					left = left[1:]
+					av = left[0]
+					if len(right) <= 1 {
 						break
 					}
-					bv = b[j]
+					right = right[1:]
+					bv = right[0]
 				}
 			}
 		}
@@ -271,13 +290,7 @@ func (rb *Bitmap) runAndRun(c1, c2 *container) bool {
 		s1, e1 := uint32(a[i]), uint32(a[i+1])
 		s2, e2 := uint32(b[j]), uint32(b[j+1])
 
-		is, ie := s1, e1
-		if s2 > is {
-			is = s2
-		}
-		if e2 < ie {
-			ie = e2
-		}
+		is, ie := max(s1, s2), min(e1, e2)
 
 		if is <= ie {
 			out = append(out, uint16(is), uint16(ie))

@@ -273,10 +273,14 @@ func (rb *Bitmap) runOrRun(c1, c2 *container) {
 	size := uint32(0)
 	for len(a) > 0 || len(b) > 0 {
 		var start, end uint16
-		if len(b) == 0 || len(a) > 0 && a[0] <= b[0] {
+		switch {
+		case len(b) == 0:
 			start, end = a[0], a[1]
 			a = a[2:]
-		} else {
+		case len(a) > 0 && a[0] <= b[0]:
+			start, end = a[0], a[1]
+			a = a[2:]
+		default:
 			start, end = b[0], b[1]
 			b = b[2:]
 		}

@@ -72,14 +72,14 @@ func bitmapsEqual(t *testing.T, a, b *Bitmap) {
 	assert.Equal(t, av, bv, "Values mismatch")
 }
 
-func TestCodec_ToBytes_FromBytes(t *testing.T) {
+func TestCodecBytes(t *testing.T) {
 	rb := makeTestBitmap()
 	data := rb.ToBytes()
 	rb2 := FromBytes(data)
 	bitmapsEqual(t, rb, rb2)
 }
 
-func TestCodec_WriteTo_ReadFrom_Methods(t *testing.T) {
+func TestCodecStream(t *testing.T) {
 	rb := makeTestBitmap()
 	var buf bytes.Buffer
 	_, err := rb.WriteTo(&buf)
@@ -91,7 +91,7 @@ func TestCodec_WriteTo_ReadFrom_Methods(t *testing.T) {
 	bitmapsEqual(t, rb, rb2)
 }
 
-func TestCodec_Package_ReadFrom(t *testing.T) {
+func TestReadFrom(t *testing.T) {
 	rb := makeTestBitmap()
 	var buf bytes.Buffer
 	_, err := rb.WriteTo(&buf)

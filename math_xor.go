@@ -22,6 +22,21 @@ func (rb *Bitmap) xor(other *Bitmap) {
 		copy(rb.index, other.index)
 		return
 	}
+	if len(rb.containers) == 1 && len(other.containers) == 1 && rb.index[0] == other.index[0] {
+		c1, c2 := &rb.containers[0], &other.containers[0]
+		var keep bool
+		switch {
+		case c1.Type == typeArray && c2.Type == typeArray:
+			c1.fork()
+			keep = rb.arrXorArr(c1, c2)
+		default:
+			keep = rb.ctrXor(c1, c2)
+		}
+		if !keep {
+			rb.Clear()
+		}
+		return
+	}
 
 	// Compact matching keys in place before allocating a merged index.
 	i, j, write := 0, 0, 0
@@ -151,17 +166,18 @@ func (rb *Bitmap) arrXorArr(c1, c2 *container) bool {
 		out = append(out, b[j:]...)
 	} else {
 		sum := len(a) + len(b)
-		// Append when scratch is nearly large enough; sparse XOR often removes most values.
-		if cap(out)+16 >= sum {
+		// Fill a sized output for one-container bitmaps; append for wider sparse merges.
+		if len(rb.index) != 1 || cap(out)+16 < sum {
 			for i < len(a) && j < len(b) {
 				av, bv := a[i], b[j]
-				if av < bv {
+				switch {
+				case av < bv:
 					out = append(out, av)
 					i++
-				} else if av == bv {
+				case av == bv:
 					i++
 					j++
-				} else {
+				default:
 					out = append(out, bv)
 					j++
 				}
@@ -176,14 +192,15 @@ func (rb *Bitmap) arrXorArr(c1, c2 *container) bool {
 			k := 0
 			for i < len(a) && j < len(b) {
 				av, bv := a[i], b[j]
-				if av < bv {
+				switch {
+				case av < bv:
 					out[k] = av
 					k++
 					i++
-				} else if av == bv {
+				case av == bv:
 					i++
 					j++
-				} else {
+				default:
 					out[k] = bv
 					k++
 					j++
